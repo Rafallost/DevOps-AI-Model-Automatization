@@ -78,10 +78,10 @@ DevOps-AI-Model-Automatization/
 │       └── template.md
 │
 ├── docs/
+│   ├── plan.md
+│   ├── architecture.md
 │   └── diagrams/
-│       ├── deployment.puml
-│       ├── data-flow.puml
-│       └── c4-context.puml
+│       └── diagrams.md
 │
 ├── scripts/
 │   ├── setup_dvc.sh
@@ -93,30 +93,35 @@ DevOps-AI-Model-Automatization/
 ├── .gitignore
 ├── .env.example
 ├── README.md
-├── ARCHITECTURE.md
-└── PLAN.md
+├── architecture.md
+└── claude.md
 ```
 
 ## Implementation Phases
 
-### Phase 1: Deployment Diagram (COMPLETED)
+### Phase 1: Architecture Documentation
 
-**Status:** COMPLETED
-
-**Deliverables:**
-- [x] `docs/diagrams/deployment.puml` - Full deployment diagram
-- [x] `docs/diagrams/data-flow.puml` - Data flow through pipeline
-- [x] `docs/diagrams/c4-context.puml` - System context diagram
-
-### Phase 2: Architecture Documentation (COMPLETED)
-
-**Status:** COMPLETED
+**Status:** IN PROGRESS
 
 **Deliverables:**
-- [x] `ARCHITECTURE.md` - Full architecture documentation
-- [x] Tech stack specifications
-- [x] AWS infrastructure layout
-- [x] Component descriptions
+- [ ] `docs/architecture.md` - Full architecture documentation
+- [ ] Tech stack specifications
+- [ ] AWS infrastructure layout
+- [ ] Component descriptions
+
+---
+
+### Phase 2: Mermaid Diagrams
+
+**Status:** IN PROGRESS
+
+**Deliverables:**
+- [ ] `docs/diagrams/diagrams.md` - All diagrams in Mermaid format:
+  - C4 Context diagram - System overview with actors
+  - Data Flow diagram - Training and deployment pipeline
+  - Deployment diagram - AWS infrastructure layout
+  - CI/CD Sequence diagram - Step-by-step pipeline flow
+  - Model Versioning flow - How models are versioned and deployed
 
 ---
 
@@ -616,8 +621,8 @@ k6 run --vus 50 --duration 30s scripts/load_test.js
 
 | Phase | Description | Dependencies |
 |-------|-------------|--------------|
-| 1 | Deployment Diagram | None |
-| 2 | Architecture Documentation | Phase 1 |
+| 1 | Architecture Documentation | None |
+| 2 | Mermaid Diagrams | Phase 1 |
 | 3 | Foundation Setup | Phase 2 |
 | 4 | ML Pipeline Setup | Phase 3 |
 | 5 | Kubernetes & Deployment | Phase 4 |
