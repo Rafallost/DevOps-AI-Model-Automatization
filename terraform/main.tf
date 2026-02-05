@@ -42,16 +42,18 @@ module "ecr" {
   project_name = var.project_name
 }
 
-# IAM + OIDC Module
-module "iam_github" {
-  source = "./modules/iam-github-oidc"
-
-  project_name       = var.project_name
-  github_repo        = var.github_repo
-  dvc_bucket_arn     = module.s3.dvc_bucket_arn
-  mlflow_bucket_arn  = module.s3.mlflow_bucket_arn
-  ecr_repository_arn = module.ecr.repository_arn
-}
+# IAM + OIDC Module - DISABLED for AWS Academy Learner Lab
+# Learner Lab does not allow creating IAM roles or OIDC providers
+# GitHub Actions will use environment credentials instead
+# module "iam_github" {
+#   source = "./modules/iam-github-oidc"
+#
+#   project_name       = var.project_name
+#   github_repo        = var.github_repo
+#   dvc_bucket_arn     = module.s3.dvc_bucket_arn
+#   mlflow_bucket_arn  = module.s3.mlflow_bucket_arn
+#   ecr_repository_arn = module.ecr.repository_arn
+# }
 
 # EC2 + k3s Module
 module "ec2" {

@@ -18,11 +18,6 @@ output "ecr_repository_url" {
   value       = module.ecr.repository_url
 }
 
-output "github_actions_role_arn" {
-  description = "IAM role ARN for GitHub Actions (use in workflows)"
-  value       = module.iam_github.role_arn
-}
-
 output "ssh_command" {
   description = "SSH command to connect to EC2"
   value       = "ssh -i ~/.ssh/${var.key_name}.pem ec2-user@${module.ec2.public_ip}"
