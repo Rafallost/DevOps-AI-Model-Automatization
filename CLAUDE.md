@@ -6,7 +6,8 @@
 2. Do the job in small steps and verify that each step is correct and aligned with the assumptions.
 3. Create working, simple code (avoid unnecessary complexity).
 4. Keep the core system flow described below.
-5. **Implementation phases, ordering, and priorities are defined in `PLAN.md` and take precedence over any phase descriptions here.**
+5. Code inserts in the plan.md file are more of an illustrative idea and a starting point than a sacred law
+6. **Implementation phases, ordering, and priorities are defined in `PLAN.md` and take precedence over any phase descriptions here.**
 
 ## Core System Flow
 

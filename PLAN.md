@@ -11,9 +11,9 @@
 
 1. **Before any AWS spending — set up a billing alert.** AWS Console → Billing & Cost Management → Budgets → Create budget → Monthly cost budget → threshold **$40** → alert via email. This fires before you hit $50 and gives you time to stop resources. **Do this before Phase 5.**
 2. **Never run `terraform apply` without first running `terraform plan`** and reading every line of the output.
-3. **EC2 is the main cost driver** at $0.0208/h. Stop it when you are not actively testing. A stopped EC2 costs $0/h, but its Elastic IP still charges $0.005/h.
-4. **Release the Elastic IP** if EC2 stays stopped for more than a day. Re-allocate it when you restart.
-5. **Phases 0–4 cost exactly $0.** Everything runs locally or on GitHub Actions free tier. No AWS resources exist yet.
+3. **EC2 is the main cost driver** at $0.0208/h. Stop it when you are not actively testing. A stopped EC2 costs $0/h for compute, but see rule 4 for IP charges.
+4. **Every public IPv4 address costs $0.005/h — always.** This applies to Elastic IPs and auto-assigned public IPs, whether the instance is running or stopped (AWS pricing change, 1 February 2024). The only way to stop paying is to release the address entirely. Release the EIP before stopping EC2 for an extended break; re-allocate when you restart.
+5. **Phases 0–4 incur no AWS charges** as long as no one runs `terraform apply` or creates AWS resources manually before Phase 5. GitHub Actions free tier covers CI runs. Do not trigger any workflow step that touches AWS until Phase 5 infrastructure is live.
 6. **Phase 5 is where the clock starts.** `terraform apply` is the moment EC2 boots and charges begin. See the pre-apply checklist in Phase 5 before running it.
 7. **After each testing session, stop EC2:**
    ```bash
@@ -181,8 +181,11 @@
 - 3.2.2 Resolutions (images and masks have same dimensions)
 - 3.2.3 File formats (JPG/PNG)
 - 3.2.4 Empty masks (mask completely black)
-- 3.2.5 Mask binarity (values only 0 and 255)
+- 3.2.5 Mask binarity (values only 0 and 255 — checked **after** pixel load, because JPG compression can silently introduce intermediate values)
 - 3.2.6 Basic statistics (file count, size distribution)
+- 3.2.7 Near-empty masks (fewer than a configurable minimum of foreground pixels; default 100)
+- 3.2.8 Coverage and centroid outliers (masks whose foreground area or geometric centroid deviate significantly from the dataset median — flags likely mislabelled images)
+- 3.2.9 Mask format advisory: masks stored as JPG risk compression artefacts that break binarity; **PNG is strongly preferred for masks**
 
 **Results:**
 
@@ -355,6 +358,13 @@ while attempt <= 3:
 if attempt > 3:
     reject_pr_with_comment()
 ```
+
+> **Note on retry effectiveness:** Changing only the random seed addresses
+> non-deterministic variance (weight initialisation, augmentation sampling) but does
+> **not** fix systematic issues such as noisy labels, distribution shift, or bad
+> train/val splits. If all three attempts fail, investigate the **data quality first**
+> before re-triggering. The retry budget is deliberately small (3) to avoid wasting CI
+> minutes on a problem that seed changes alone cannot solve.
 
 ##### 3.5.C — After 3 failed attempts:
 
@@ -747,6 +757,8 @@ __pycache__/
 .idea/
 
 # Auto-generated data splits (created by prepareDataset.py)
+# Note: DVC also declares this path as an output in dvc.yaml; this entry is a
+# safety net so that running prepareDataset.py outside DVC does not commit splits.
 WMS/data/training/temp/
 
 # Local model checkpoints — MLflow is source of truth, not Git
@@ -769,6 +781,8 @@ torch
 torchvision
 Pillow
 PyYAML
+numpy
+tqdm
 mlflow
 fastapi
 uvicorn
@@ -803,10 +817,12 @@ cd Water-Meters-Segmentation-Autimatization
 
 dvc init
 
-# S3 remote — LOCAL CONFIG ONLY. No AWS cost here.
-# The bucket does not exist yet. It is created in Phase 5 (terraform apply).
+# S3 remote — the URL is written to .dvc/config and committed (standard DVC practice;
+# only credentials must stay local, and those come from the IAM role at runtime).
+# The bucket does not exist yet — created in Phase 5 (terraform apply).
 # dvc push/pull will fail until then — that is expected and normal.
-dvc remote add -d s3remote s3://wms-dvc-data/dvc
+# IMPORTANT: replace <ACCOUNT_ID> with your AWS account ID to make the bucket name globally unique.
+dvc remote add -d s3remote s3://wms-dvc-data-<ACCOUNT_ID>/dvc
 dvc remote modify s3remote region eu-central-1
 
 # Track existing training data
@@ -917,13 +933,23 @@ stages:
 #!/usr/bin/env python3
 """
 Training data validation.
-Checks: image↔mask pair matching, resolutions, file formats, mask binarity.
+Checks: image↔mask pair matching, resolutions, file formats, mask binarity,
+        near-empty masks, coverage/centroid outliers,
+        JPG compression artefacts in masks (non-binary pixel values after load).
 
 Usage:
     python data-qa.py WMS/data/training/ --output report.json
 
 Exit codes: 0 = PASS, 1 = FAIL
 Output: JSON report with errors list + statistics
+
+Notes:
+- Masks should be PNG. JPG compression introduces non-binary values even for
+  visually binary images; flag any mask with pixels outside {0, 255} after load.
+- A mask with fewer than MIN_MASK_PIXELS (default 100) foreground pixels is
+  treated as effectively empty and reported as an error.
+- Coverage outliers are detected by comparing each mask's foreground area and
+  centroid to the dataset median; masks far outside the expected range are flagged.
 """
 # ... full implementation
 ```
@@ -1034,7 +1060,23 @@ with mlflow.start_run(run_name=get_model_version()):
 
 **Goal:** Connect DevOps repo as submodule + create all GitHub Actions workflows.
 
-> No AWS cost in this phase. The workflows are written here but they do not touch AWS yet — `dvc pull` in `train-pr.yaml` and ECR push in `release-deploy.yaml` will only actually hit AWS once Phase 5 infrastructure is live. Once it is, every workflow run that reads from S3 or pushes to ECR counts toward the budget.
+> No AWS cost in this phase. The workflows are written here but they do not touch AWS yet — `dvc pull` in `train-pr.yaml` and ECR push in `release-deploy.yaml` will only actually hit AWS once Phase 5 infrastructure is live. Once it is, every workflow run that reads from S3 or pushes to ECR counts toward the budget. `dvc pull` transfers data **out** of S3 to the internet (egress); large datasets + frequent training runs will accumulate egress costs.
+>
+> **GH Actions ↔ EC2 connectivity — architectural decision.** GitHub Actions runners
+> have ephemeral, dynamic IPs; you cannot whitelist them in a security group. Two
+> consequences for this plan:
+>
+> 1. **Training jobs cannot reach MLflow on EC2.** Solution: each training job starts
+>    MLflow **locally** (SQLite backend) and pushes artifacts directly to S3. The
+>    EC2-hosted MLflow instance stays the authoritative registry; after a successful
+>    merge the release pipeline (which runs on EC2) syncs the run data from S3 into
+>    the local MLflow DB.
+> 2. **Deploy jobs cannot reach the k3s API on EC2.** Solution: `release-deploy.yaml`
+>    runs on a **self-hosted runner installed on EC2** (see Phase 5.8). That runner has
+>    localhost access to both the k3s API (6443) and MLflow (5000).
+>
+> Security implication: MLflow (5000) and the k3s API (6443) never need to be open to
+> 0.0.0.0/0. Only SSH (22) must be reachable from `my_ip`.
 
 **New directories:** `.github/workflows/`, `devops/` (submodule link)
 **New files:** `.gitmodules`, `ci.yaml`, `data-qa.yaml`, `train-pr.yaml`, `release-deploy.yaml`
@@ -1151,7 +1193,10 @@ jobs:
       - name: Train with retry
         run: python devops/scripts/train-with-retry.py --config WMS/configs/train.yaml --max-retries 3
         env:
-          MLFLOW_TRACKING_URI: http://<EC2_IP>:5000
+          MLFLOW_TRACKING_URI: sqlite:///mlruns.db
+          MLFLOW_ARTIFACT_ROOT: s3://wms-mlflow-artifacts-<ACCOUNT_ID>/ci-runs/
+      - name: Upload MLflow run data to S3
+        run: aws s3 sync mlruns/ s3://wms-mlflow-artifacts-<ACCOUNT_ID>/ci-runs/
       - name: Post results as PR comment
         uses: actions/github-script@v7
         with:
@@ -1175,7 +1220,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # Must run on EC2 — see Phase 5.8 (self-hosted runner setup)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1221,9 +1266,10 @@ jobs:
 >
 > - [ ] Billing budget alert is set at $40 (AWS Console → Billing → Budgets)
 > - [ ] You have run `terraform plan` and read every resource in the output
-> - [ ] The plan lists exactly: 1 VPC, 1 subnet, 1 security group, 1 EC2 (t3.small), 1 Elastic IP, 2 S3 buckets, 1 ECR repo, 1 IAM role + OIDC provider
+> - [ ] The plan lists exactly: 1 VPC, 1 subnet, 1 security group, 1 EC2 (t3.small), 1 Elastic IP, 2 S3 buckets, 1 ECR repo, 1 IAM role + OIDC provider, 1 EC2 instance profile (for S3 access)
 > - [ ] **NO NAT Gateway** anywhere in the plan
 > - [ ] **NO RDS** anywhere in the plan
+> - [ ] Security group: ports 5000 and 6443 are **not** open to 0.0.0.0/0
 > - [ ] You have your AWS account ID and SSH key name ready
 > - [ ] You know the EC2 instance ID will appear in the output — write it down
 
@@ -1238,7 +1284,11 @@ jobs:
 
 ```hcl
 # VPC + single public subnet (NO NAT Gateway — budget constraint)
-# Security group: SSH (22), k3s API (6443), MLflow (5000), HTTP (8000)
+# Security group:
+#   SSH (22)       — source: my_ip only
+#   k3s API (6443) — source: CLOSED to public (self-hosted runner uses localhost)
+#   MLflow (5000)  — source: CLOSED to public (self-hosted runner uses localhost)
+#   HTTP (8000)    — source: my_ip only (for manual smoke tests from developer machine)
 # Route table: internet gateway only
 ```
 
@@ -1249,34 +1299,72 @@ jobs:
 ```hcl
 # EC2 t3.small in public subnet
 # Elastic IP for stable address
+# EC2 instance profile — grants the instance S3 read/write on both buckets
+#   (MLflow needs this to push/pull artifacts without static credentials)
 # user-data.sh runs at startup (installs k3s, MLflow, Docker)
+# NOTE: AMI must be Amazon Linux 2 (verify ami-ID for eu-central-1 before apply)
 ```
 
 **user-data.sh:**
 
 ```bash
 #!/bin/bash
+# Prerequisites: AMI must be Amazon Linux 2 (e.g. ami-0e2df48e8441df418 in eu-central-1)
+set -euo pipefail
+
 yum update -y
-# Install Docker
-yum install -y docker && systemctl start docker && systemctl enable docker
-# Install k3s
+
+# ── Docker ──
+yum install -y docker
+systemctl start docker
+systemctl enable docker
+
+# ── Python 3 + pip ──
+yum install -y python3 python3-pip
+
+# ── k3s ──
 curl -sfL https://get.k3s.io | sh
-# Install Helm
+# Make kubeconfig readable by non-root users
+chmod 644 /etc/rancher/k3s/k3s.yaml
+
+# ── Helm ──
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-# Start MLflow
-pip install mlflow boto3
-nohup mlflow server \
-  --backend-store-uri sqlite:///mlflow.db \
-  --default-artifact-root s3://wms-mlflow-artifacts/ \
-  --host 0.0.0.0 &
+
+# ── MLflow (runs as a systemd service so it survives reboot) ──
+pip3 install mlflow boto3
+mkdir -p /opt/mlflow
+
+cat > /etc/systemd/system/mlflow.service <<EOF
+[Unit]
+Description=MLflow Tracking Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/mlflow server \
+  --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
+  --default-artifact-root s3://wms-mlflow-artifacts-<ACCOUNT_ID>/ \
+  --host 0.0.0.0
+WorkingDirectory=/opt/mlflow
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl start mlflow
+systemctl enable mlflow
 ```
 
 #### 5.3 S3 Buckets — `terraform/modules/s3-mlops/`
 
 ```hcl
-# Bucket 1: wms-dvc-data       — DVC remote (training data)
-# Bucket 2: wms-mlflow-artifacts — MLflow artifacts (models, logs)
+# Bucket 1: wms-dvc-data-<ACCOUNT_ID>       — DVC remote (training data)
+# Bucket 2: wms-mlflow-artifacts-<ACCOUNT_ID> — MLflow artifacts (models, logs)
 # Both: eu-central-1, versioning enabled
+# S3 bucket names are globally unique — appending the account ID avoids collisions.
+# Actual names come from the dvc_bucket / mlflow_bucket variables in tfvars.
 ```
 
 #### 5.4 ECR — `terraform/modules/ecr/`
@@ -1284,6 +1372,7 @@ nohup mlflow server \
 ```hcl
 # Repository: wms-model
 # Lifecycle policy: keep latest 5 images, expire older
+# Set force_delete = true so that terraform destroy can remove a non-empty repo
 ```
 
 #### 5.5 IAM + OIDC — `terraform/modules/iam-github-oidc/`
@@ -1303,8 +1392,9 @@ aws_region    = "eu-central-1"
 instance_type = "t3.small"
 my_ip         = "YOUR_IP/32"
 key_name      = "your-key"
-mlflow_bucket = "wms-mlflow-artifacts"
-dvc_bucket    = "wms-dvc-data"
+# S3 bucket names must be globally unique — append your AWS account ID.
+mlflow_bucket = "wms-mlflow-artifacts-<ACCOUNT_ID>"
+dvc_bucket    = "wms-dvc-data-<ACCOUNT_ID>"
 ```
 
 #### 5.7 Setup Scripts (DevOps)
@@ -1320,13 +1410,49 @@ dvc_bucket    = "wms-dvc-data"
 
 ```bash
 #!/bin/bash
-# pip install mlflow boto3
-# mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root s3://wms-mlflow-artifacts/
+# pip3 install mlflow boto3
+# sudo systemctl start mlflow   ← if the systemd unit from user-data is present
+# --- or manually ---
+# mkdir -p /opt/mlflow
+# mlflow server \
+#   --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
+#   --default-artifact-root s3://wms-mlflow-artifacts-<ACCOUNT_ID>/ \
+#   --host 0.0.0.0
 ```
 
-#### 5.8 Verification
+#### 5.8 Self-Hosted GitHub Actions Runner
 
-- [ ] `terraform plan` shows: 1 VPC, 1 EC2, 1 EIP, 2 S3 buckets, 1 ECR, 1 IAM role
+`release-deploy.yaml` must run on EC2 so it has localhost access to the k3s API and MLflow. Set this up **after** EC2 is running and k3s is healthy:
+
+```bash
+# SSH into EC2
+ssh -i <key.pem> ec2-user@<EC2_PUBLIC_IP>
+
+# Create runner directory
+mkdir -p /opt/runner && cd /opt/runner
+
+# Download the runner — get the URL from:
+#   GitHub repo → Settings → Actions → Runners → New runner → Linux → x64
+curl -O <DOWNLOAD_URL>
+tar xzf actions-runner-*.tar.gz
+
+# Configure (use the token from the same GitHub UI page — it is single-use)
+./config.sh --url https://github.com/Rafallost/Water-Meters-Segmentation-Autimatization \
+            --token <TOKEN>
+
+# Install and start as a persistent service
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+> The runner token is single-use; generate a fresh one from the GitHub UI each time
+> you need to re-register. Once started, the runner stays alive and picks up jobs
+> labelled `self-hosted`.
+
+#### 5.9 Verification
+
+- [ ] `terraform plan` shows: 1 VPC, 1 EC2, 1 EIP, 2 S3 buckets, 1 ECR, 1 IAM role, 1 EC2 instance profile
+- [ ] Self-hosted runner is registered and shows as "online" in GitHub → Settings → Actions → Runners
 - [ ] **NO NAT Gateway** in plan
 - [ ] **NO RDS** in plan
 - [ ] After `terraform apply`: S3 buckets accessible, EC2 running, MLflow reachable at `http://<EC2_PUBLIC_IP>:5000`
@@ -1340,7 +1466,7 @@ dvc_bucket    = "wms-dvc-data"
 > aws ec2 stop-instances --instance-ids <INSTANCE_ID> --region eu-central-1
 > ```
 >
-> A stopped EC2 costs $0/h. The Elastic IP still charges $0.005/h while allocated to a stopped instance.
+> A stopped EC2 costs $0/h for compute. The public IPv4 / EIP still charges $0.005/h while allocated — release it if EC2 will stay stopped for more than a day (see budget rule 4).
 
 ---
 
@@ -1454,7 +1580,7 @@ resources:
 ```
 
 **templates/deployment.yaml** — standard K8s Deployment using `{{ .Values.image }}`
-**templates/service.yaml** — NodePort exposing 8000
+**templates/service.yaml** — NodePort Service (container port 8000; actual NodePort is auto-assigned in the 30000–32767 range). For stable external access, route through Traefik Ingress (bundled with k3s by default) instead of relying on the NodePort directly.
 **templates/servicemonitor.yaml** — Prometheus scrape on `/metrics`
 
 #### 6.4 Dockerfile Templates (DevOps)
@@ -1502,7 +1628,13 @@ env:
   - Error rate
   - Pod CPU / Memory
 
-> **Budget note:** Prometheus + Grafana add significant CPU and memory load to the single t3.small. Run the monitoring stack only during active testing — not overnight, not over weekends. After you have collected the data you need, tear it down before stopping EC2:
+> **Resource warning:** Prometheus + Grafana add significant CPU and memory load.
+> A t3.small (2 GiB RAM) is tight — k3s + the application + kube-prometheus-stack
+> may trigger OOM kills or pod evictions. **Consider upgrading to t3.medium (4 GiB,
+> $0.0416/h) before deploying the monitoring stack** — the cost difference over 100 h
+> of total testing is ~$2, well within budget. If you stay on t3.small, be prepared
+> for instability. Run the monitoring stack only during active testing — not overnight,
+> not over weekends. After you have collected the data you need, tear it down before stopping EC2:
 >
 > ```bash
 > helm uninstall kube-prometheus-stack --namespace monitoring
@@ -1583,12 +1715,30 @@ Each step: description + expected output + `Time taken: ___`
 
 set -e
 
+# ── Step 1: Empty S3 buckets (required before terraform destroy) ──
+# Buckets with versioning enabled cannot be deleted while they contain objects.
+echo "=== Emptying S3 buckets (all versions + delete markers) ==="
+for bucket in $(aws s3api list-buckets --query "Buckets[?starts_with(Name, 'wms-')].Name" --output text); do
+  echo "  Emptying $bucket ..."
+  # Remove all object versions
+  aws s3api list-object-versions --bucket "$bucket" \
+    --output json --query "Versions[].{Key:Key,Id:VersionId}" 2>/dev/null | \
+    jq -r '.[]? | .Key + "\t" + .Id' | while IFS=$'\t' read -r key id; do
+      aws s3api delete-object --bucket "$bucket" --key "$key" --version-id "$id"
+    done
+  # Remove all delete markers
+  aws s3api list-object-versions --bucket "$bucket" \
+    --output json --query "DeleteMarkers[].{Key:Key,Id:VersionId}" 2>/dev/null | \
+    jq -r '.[]? | .Key + "\t" + .Id' | while IFS=$'\t' read -r key id; do
+      aws s3api delete-object --bucket "$bucket" --key "$key" --version-id "$id"
+    done
+done
+
+# ── Step 2: Destroy all Terraform-managed resources (EC2, S3, ECR, VPC, IAM) ──
 echo "Destroying Terraform resources..."
 cd devops/terraform
 terraform destroy -var-file=../../infrastructure/terraform.tfvars -auto-approve
-
-echo "Deleting ECR repository..."
-aws ecr delete-repository --repository-name wms-model --force --region eu-central-1
+# NOTE: ECR is managed by Terraform (force_delete = true); no manual delete needed.
 
 echo "Done. Verify in AWS Console that no resources remain."
 echo ""
@@ -1726,14 +1876,17 @@ Cover: project overview, quick start (clone with submodules, install, run locall
 
 > **Do this first:** AWS Console → Billing & Cost Management → Budgets → Create budget → Monthly cost → threshold $40 → alert via email. Takes 2 minutes. Without it you have no early warning if something goes wrong.
 
-| Resource                      | Cost/Hour | Est. Hours | Total  |
-| ----------------------------- | --------- | ---------- | ------ |
-| EC2 t3.small                  | $0.0208   | 100h       | $2.08  |
-| S3 (5 GB)                     | —         | —          | ~$0.12 |
-| ECR (1 GB images)             | —         | —          | ~$0.10 |
-| Data transfer                 | ~$0.09/GB | 5 GB       | ~$0.45 |
-| Elastic IP (when EC2 stopped) | $0.005/h  | 100h       | $0.50  |
-| Buffer for mistakes           | —         | —          | $10.00 |
+| Resource                          | Cost/Hour  | Est. Hours | Total  | Notes                                          |
+| --------------------------------- | ---------- | ---------- | ------ | ---------------------------------------------- |
+| EC2 t3.small                      | $0.0208    | 100h       | $2.08  | Stop when not actively testing                 |
+| Public IPv4 / EIP                 | $0.005     | 200h       | $1.00  | Charged always while allocated — see rule 4    |
+| S3 (5 GB, two buckets)            | —          | —          | ~$0.12 | Versioning enabled                             |
+| ECR (1 GB images)                 | —          | —          | ~$0.10 | Latest 5 images kept                           |
+| Data transfer OUT (S3 → internet) | ~$0.09/GB  | 5 GB       | ~$0.45 | GH Actions `dvc pull` is egress from AWS        |
+| Buffer for mistakes               | —          | —          | $10.00 |                                                |
+
+> Optional: upgrading to t3.medium for Phase 7 (monitoring) adds ~$2 over 100 h but
+> significantly reduces OOM risk. Still well within the $50 budget.
 
 **Estimated Total: ~$15–25**
 
