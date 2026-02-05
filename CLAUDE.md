@@ -38,7 +38,7 @@ USER uploads data → DATA QA → [FAIL: error message]
 
 **Goal:** Compare manual vs. automated ML model deployment, demonstrating DevOps benefits for AI/ML workflows.
 
-**Budget Constraint:** ~$50 USD total on AWS (one-time project — build, test, document, tear down)
+**Budget Constraint:** ~$50 USD total on AWS (Student's plan)(one-time project — build, test, document, tear down)
 
 ---
 

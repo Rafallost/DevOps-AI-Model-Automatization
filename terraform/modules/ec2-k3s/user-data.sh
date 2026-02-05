@@ -27,7 +27,9 @@ yum install -y python3 python3-pip git
 
 # ── k3s ──
 echo "Installing k3s..."
-curl -sfL https://get.k3s.io | sh -
+# Skip SELinux RPM due to dependency conflict on Amazon Linux 2
+# (container-selinux version mismatch with selinux-policy-targeted)
+curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_SELINUX_RPM=true sh -
 # Make kubeconfig readable by non-root users
 chmod 644 /etc/rancher/k3s/k3s.yaml
 # Set KUBECONFIG for ec2-user
@@ -39,7 +41,9 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
 # ── MLflow ──
 echo "Installing MLflow..."
-pip3 install mlflow boto3
+# Pin urllib3<2 for compatibility with OpenSSL 1.0.2k on Amazon Linux 2
+# (urllib3 v2+ requires OpenSSL 1.1.1+)
+pip3 install mlflow boto3 'urllib3<2'
 mkdir -p /opt/mlflow
 
 # Create MLflow systemd service
@@ -50,6 +54,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/local/bin/mlflow server \
   --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
   --default-artifact-root s3://${mlflow_bucket}/ \
