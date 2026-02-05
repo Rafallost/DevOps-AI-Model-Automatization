@@ -32,8 +32,9 @@ echo "Installing k3s..."
 curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_SELINUX_RPM=true sh -
 # Make kubeconfig readable by non-root users
 chmod 644 /etc/rancher/k3s/k3s.yaml
-# Set KUBECONFIG for ec2-user
+# Set KUBECONFIG and kubectl alias for ec2-user
 echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/ec2-user/.bashrc
+echo 'alias kubectl="/usr/local/bin/k3s kubectl"' >> /home/ec2-user/.bashrc
 
 # ── Helm ──
 echo "Installing Helm..."
