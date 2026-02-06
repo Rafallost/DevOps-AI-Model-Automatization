@@ -1,0 +1,76 @@
+# Default values for ml-model serving chart
+# This is a YAML-formatted file.
+# Override these values in project-specific helm-values.yaml
+
+replicaCount: 1
+
+image:
+  repository: ""  # Must be overridden (e.g., ECR URL)
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: NodePort  # Use NodePort instead of LoadBalancer (budget constraint)
+  port: 8000
+  targetPort: 8000
+  # nodePort: 30080  # Optional: specify node port, otherwise auto-assigned
+
+resources:
+  # Resource limits appropriate for t3.small (2GB RAM, 2 vCPU)
+  # Leave headroom for k3s, MLflow, and other pods
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+
+# Environment variables for the application
+env:
+  - name: MODEL_PATH
+    value: "/app/models/best.pth"
+  - name: PYTHONUNBUFFERED
+    value: "1"
+  # Override these in helm-values.yaml:
+  # - name: MLFLOW_TRACKING_URI
+  #   value: "http://localhost:5000"
+  # - name: MODEL_VERSION
+  #   value: "production"
+
+# Liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 15
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Service monitor for Prometheus (optional)
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+# Node selector (optional)
+nodeSelector: {}
+
+# Tolerations (optional)
+tolerations: []
+
+# Affinity rules (optional)
+affinity: {}
