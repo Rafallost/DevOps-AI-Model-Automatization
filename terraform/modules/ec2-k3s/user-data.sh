@@ -1,6 +1,6 @@
 #!/bin/bash
 # EC2 User Data Script - Installs Docker, k3s, Helm, MLflow
-# Runs at instance launch (Amazon Linux 2)
+# Runs at instance launch (Amazon Linux 2023)
 
 set -euo pipefail
 
@@ -42,9 +42,8 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
 # ── MLflow ──
 echo "Installing MLflow..."
-# Pin urllib3<2 for compatibility with OpenSSL 1.0.2k on Amazon Linux 2
-# (urllib3 v2+ requires OpenSSL 1.1.1+)
-pip3 install mlflow boto3 'urllib3<2'
+# Amazon Linux 2023 has OpenSSL 3.0, so no urllib3 pinning needed
+pip3 install mlflow boto3
 mkdir -p /opt/mlflow
 
 # Create MLflow systemd service
