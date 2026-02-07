@@ -40,7 +40,7 @@ resource "aws_instance" "k3s" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 20
+    volume_size           = 40
     delete_on_termination = true
   }
 
