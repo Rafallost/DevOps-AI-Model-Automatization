@@ -74,8 +74,16 @@ resource "aws_security_group" "ec2" {
     cidr_blocks = [var.my_ip]
   }
 
-  # NOTE: MLflow (5000) and k3s API (6443) are NOT exposed to internet
-  # Self-hosted runner uses localhost access
+  # MLflow - open for GitHub Actions (ephemeral infrastructure)
+  ingress {
+    description = "MLflow from anywhere (for GitHub Actions)"
+    from_port   = 5000
+    to_port     = 5000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # NOTE: k3s API (6443) is NOT exposed to internet
 
   # Allow all outbound traffic
   egress {
