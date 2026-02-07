@@ -3,7 +3,6 @@
 
 # Terraform
 terraform/.terraform/
-terraform/.terraform.lock.hcl
 terraform/terraform.tfstate*
 terraform/*.tfstate
 terraform/*.tfstate.*
