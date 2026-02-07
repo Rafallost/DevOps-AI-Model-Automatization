@@ -72,19 +72,19 @@ echo exit 0
 ) > "%HOOKS_DIR%\pre-push"
 
 echo.
-echo ✅ Git hooks installed successfully!
+echo [OK] Git hooks installed successfully!
 echo.
 echo What this does:
-echo   • When you 'git push origin main' with training data changes
-echo   • Hook automatically creates a 'data/YYYYMMDD-HHMMSS' branch
-echo   • Pushes your changes there instead
-echo   • GitHub Actions takes over from there
+echo   - When you 'git push origin main' with training data changes
+echo   - Hook automatically creates a 'data/YYYYMMDD-HHMMSS' branch
+echo   - Pushes your changes there instead
+echo   - GitHub Actions takes over from there
 echo.
 echo To test:
 echo   1. Add a new training image
 echo   2. git add WMS/data/training/
 echo   3. git commit -m "test: new training data"
 echo   4. git push origin main
-echo   5. Watch the magic happen! ✨
+echo   5. Watch the magic happen!
 echo.
 pause

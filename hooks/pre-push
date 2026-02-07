@@ -1,0 +1,59 @@
+#!/bin/bash
+# Pre-push hook: Auto-create data branch for training data changes
+# This hook is version-controlled in devops/hooks/
+# Setup: git config core.hooksPath devops/hooks
+
+echo "🔍 Checking for training data changes..."
+
+while read local_ref local_sha remote_ref remote_sha; do
+  # Only intercept pushes to main
+  if [[ "$remote_ref" == "refs/heads/main" ]]; then
+    # Check if there are any changes to training data
+    if git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null | grep -q "WMS/data/training"; then
+      echo ""
+      echo "╔════════════════════════════════════════════════════════════╗"
+      echo "║  🚫 Direct push to main with training data blocked        ║"
+      echo "╚════════════════════════════════════════════════════════════╝"
+      echo ""
+      echo "Training data changes detected. Creating data branch..."
+
+      # Create timestamped branch
+      TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+      BRANCH="data/$TIMESTAMP"
+
+      echo "📦 Creating branch: $BRANCH"
+
+      # Create and switch to the new branch
+      git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
+
+      # Push to the new branch
+      echo "🚀 Pushing to $BRANCH..."
+      git push -u origin "$BRANCH"
+
+      if [ $? -eq 0 ]; then
+        echo ""
+        echo "✅ Success! Your changes are now on branch: $BRANCH"
+        echo ""
+        echo "Next steps:"
+        echo "  1. GitHub Actions will validate your data"
+        echo "  2. If valid, a Pull Request will be created automatically"
+        echo "  3. Training will run automatically"
+        echo "  4. If model improves, PR will be auto-approved"
+        echo "  5. You (or admin) can then merge the PR"
+        echo ""
+        echo "Monitor progress at:"
+        echo "  https://github.com/$(git remote get-url origin | sed 's/.*github.com[:/]\(.*\)\.git/\1/')/actions"
+        echo ""
+      else
+        echo "❌ Failed to push to $BRANCH"
+        echo "Please check your connection and try again"
+      fi
+
+      # Block the original push to main
+      exit 1
+    fi
+  fi
+done
+
+# Allow push if no training data changes or not pushing to main
+exit 0
