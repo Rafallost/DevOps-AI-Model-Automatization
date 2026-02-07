@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-Compares new model metrics with baseline.
+quality-gate.py - Model Quality Gate
+
+Compares new model metrics with baseline thresholds.
 
 Usage:
-    python quality-gate.py --report training-report.json \
-        --baseline-dice 0.9275 --baseline-iou 0.8865 --tolerance 0.02
+    python quality-gate.py \
+        --dice 0.9301 \
+        --iou 0.8890 \
+        --baseline-dice 0.9275 \
+        --baseline-iou 0.8865 \
+        --tolerance 0.02
 
-Exit codes: 0 = PASS (model >= baseline - tolerance), 1 = FAIL
-
-The script reads training-report.json (written by train-with-retry.py), picks the
-attempt with the highest val_dice, and checks both val_dice and val_iou against
-the baseline minus the configured tolerance.
+Exit codes:
+    0 = PASS (metrics meet or exceed threshold)
+    1 = FAIL (metrics below threshold)
 """
 
 import argparse
@@ -18,48 +22,137 @@ import json
 import sys
 
 
+def quality_gate(
+    current_dice, current_iou,
+    baseline_dice, baseline_iou,
+    tolerance
+):
+    """
+    Check if current metrics meet quality gate.
+    
+    Returns:
+        dict with pass/fail status and details
+    """
+    threshold_dice = baseline_dice - tolerance
+    threshold_iou = baseline_iou - tolerance
+    
+    dice_pass = current_dice >= threshold_dice
+    iou_pass = current_iou >= threshold_iou
+    
+    passed = dice_pass and iou_pass
+    improved = current_dice > baseline_dice or current_iou > baseline_iou
+    
+    result = {
+        "passed": passed,
+        "improved": improved,
+        "metrics": {
+            "current": {
+                "dice": current_dice,
+                "iou": current_iou
+            },
+            "baseline": {
+                "dice": baseline_dice,
+                "iou": baseline_iou
+            },
+            "threshold": {
+                "dice": threshold_dice,
+                "iou": threshold_iou
+            }
+        },
+        "checks": {
+            "dice": {
+                "current": current_dice,
+                "threshold": threshold_dice,
+                "passed": dice_pass,
+                "delta": current_dice - baseline_dice
+            },
+            "iou": {
+                "current": current_iou,
+                "threshold": threshold_iou,
+                "passed": iou_pass,
+                "delta": current_iou - baseline_iou
+            }
+        }
+    }
+    
+    return result
+
+
+def format_result(result):
+    """Format result as human-readable text."""
+    lines = []
+    lines.append("=" * 60)
+    
+    if result["passed"]:
+        status = "✅ QUALITY GATE PASSED"
+        if result["improved"]:
+            status += " (IMPROVED)"
+    else:
+        status = "❌ QUALITY GATE FAILED"
+    
+    lines.append(status)
+    lines.append("=" * 60)
+    lines.append("")
+    
+    lines.append("Metrics Comparison:")
+    lines.append("")
+    lines.append(f"{'Metric':<10} {'Current':<10} {'Baseline':<10} {'Threshold':<10} {'Status':<10}")
+    lines.append("-" * 60)
+    
+    for metric in ["dice", "iou"]:
+        check = result["checks"][metric]
+        status_icon = "✅" if check["passed"] else "❌"
+        delta_pct = (check["delta"] / result["metrics"]["baseline"][metric]) * 100
+        
+        lines.append(
+            f"{metric.upper():<10} "
+            f"{check['current']:<10.4f} "
+            f"{result['metrics']['baseline'][metric]:<10.4f} "
+            f"{check['threshold']:<10.4f} "
+            f"{status_icon} ({delta_pct:+.2f}%)"
+        )
+    
+    lines.append("")
+    
+    if result["passed"]:
+        if result["improved"]:
+            lines.append("🚀 Model improved over baseline - ready for deployment")
+        else:
+            lines.append("✅ Model meets minimum quality - ready for deployment")
+    else:
+        lines.append("⚠️  Model below threshold - training failed quality gate")
+    
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
 def main():
-    # Ensure unicode output works on Windows consoles (no-op on Linux/CI)
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-
-    parser = argparse.ArgumentParser(description="Quality gate — metrics vs baseline")
-    parser.add_argument("--report", required=True, help="Path to training-report.json")
-    parser.add_argument("--baseline-dice", type=float, default=0.9275,
-                        help="Baseline Dice score (from reference model)")
-    parser.add_argument("--baseline-iou", type=float, default=0.8865,
-                        help="Baseline IoU score (from reference model)")
-    parser.add_argument("--tolerance", type=float, default=0.02,
-                        help="Allowed drop below baseline before FAIL")
+    parser = argparse.ArgumentParser(description="Model quality gate")
+    parser.add_argument("--dice", type=float, required=True, help="Current Dice score")
+    parser.add_argument("--iou", type=float, required=True, help="Current IoU score")
+    parser.add_argument("--baseline-dice", type=float, default=0.9275, help="Baseline Dice")
+    parser.add_argument("--baseline-iou", type=float, default=0.8865, help="Baseline IoU")
+    parser.add_argument("--tolerance", type=float, default=0.02, help="Acceptable degradation")
+    parser.add_argument("--output", type=str, help="Output JSON file")
+    
     args = parser.parse_args()
-
-    with open(args.report) as fh:
-        report = json.load(fh)
-
-    attempts = report.get("attempts", [])
-    if not attempts:
-        print("Quality Gate: FAIL — no attempts in report")
-        sys.exit(1)
-
-    # Pick the attempt with the best val_dice
-    best = max(attempts, key=lambda a: a.get("metrics", {}).get("val_dice", 0.0))
-    metrics = best.get("metrics", {})
-    val_dice = metrics.get("val_dice", 0.0)
-    val_iou = metrics.get("val_iou", 0.0)
-
-    min_dice = args.baseline_dice - args.tolerance
-    min_iou = args.baseline_iou - args.tolerance
-
-    dice_ok = val_dice >= min_dice
-    iou_ok = val_iou >= min_iou
-    passed = dice_ok and iou_ok
-
-    print("Quality Gate:", "PASS" if passed else "FAIL")
-    print(f"  Dice: {val_dice:.4f}  (>= {min_dice:.4f})  {'✓' if dice_ok else '✗'}")
-    print(f"  IoU:  {val_iou:.4f}  (>= {min_iou:.4f})  {'✓' if iou_ok else '✗'}")
-    print(f"  (attempt {best.get('attempt', '?')}, seed {best.get('seed', '?')})")
-
-    sys.exit(0 if passed else 1)
+    
+    result = quality_gate(
+        args.dice, args.iou,
+        args.baseline_dice, args.baseline_iou,
+        args.tolerance
+    )
+    
+    # Save JSON
+    if args.output:
+        with open(args.output, 'w') as f:
+            json.dump(result, f, indent=2)
+    
+    # Print report
+    print()
+    print(format_result(result))
+    
+    sys.exit(0 if result["passed"] else 1)
 
 
 if __name__ == "__main__":
