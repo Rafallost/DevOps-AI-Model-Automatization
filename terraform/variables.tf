@@ -19,7 +19,7 @@ variable "availability_zone" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.small"
+  default     = "t3.large"  # 8GB RAM, stable for ML workloads with PyTorch
 }
 
 variable "my_ip" {

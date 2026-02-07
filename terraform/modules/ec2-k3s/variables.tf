@@ -6,7 +6,7 @@ variable "project_name" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.small"
+  default     = "t3.large"  # 8GB RAM - minimum for ML workloads
 }
 
 variable "subnet_id" {
