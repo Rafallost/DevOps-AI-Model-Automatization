@@ -40,7 +40,7 @@ resource "aws_instance" "k3s" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 40
+    volume_size           = 100  # Increased from 40GB to handle MLflow artifacts and k3s images
     delete_on_termination = true
   }
 

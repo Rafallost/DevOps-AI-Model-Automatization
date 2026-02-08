@@ -71,8 +71,73 @@ systemctl daemon-reload
 systemctl start mlflow
 systemctl enable mlflow
 
+# ── Automatic Cleanup & Monitoring ──
+echo "Setting up automatic cleanup..."
+
+# Configure journald log rotation (max 500MB, 7 days)
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/size-limit.conf <<'JOURNAL_EOF'
+[Journal]
+SystemMaxUse=500M
+MaxRetentionSec=7d
+JOURNAL_EOF
+systemctl restart systemd-journald
+
+# Configure logrotate for application logs
+cat > /etc/logrotate.d/mlflow <<'LOGROTATE_EOF'
+/opt/mlflow/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+}
+LOGROTATE_EOF
+
+# Create cleanup script
+cat > /usr/local/bin/cleanup-k3s.sh <<'CLEANUP_EOF'
+#!/bin/bash
+# Automatic cleanup script for k3s and logs
+echo "Running cleanup at $(date)"
+
+# Clean old k3s images (unused for 24h+)
+echo "Cleaning k3s images..."
+/usr/local/bin/k3s crictl rmi --prune 2>/dev/null || true
+
+# Clean old logs
+echo "Cleaning old logs..."
+journalctl --vacuum-time=7d
+find /var/log -name "*.gz" -mtime +7 -delete 2>/dev/null || true
+
+# Clean failed/unknown k3s pods
+echo "Cleaning failed k3s pods..."
+/usr/local/bin/k3s kubectl delete pods --field-selector=status.phase==Failed --all-namespaces 2>/dev/null || true
+/usr/local/bin/k3s kubectl delete pods --field-selector=status.phase==Unknown --all-namespaces 2>/dev/null || true
+
+# Report disk usage
+echo "Disk usage after cleanup:"
+df -h / | grep -v tmpfs
+
+echo "Cleanup completed at $(date)"
+CLEANUP_EOF
+
+chmod +x /usr/local/bin/cleanup-k3s.sh
+
+# Run cleanup daily at 3 AM
+cat > /etc/cron.d/cleanup-k3s <<'CRON_EOF'
+0 3 * * * root /usr/local/bin/cleanup-k3s.sh >> /var/log/cleanup-k3s.log 2>&1
+CRON_EOF
+
+# Run initial cleanup
+/usr/local/bin/cleanup-k3s.sh
+
 echo "=== User-data script completed at $(date) ==="
 echo "Services status:"
 systemctl status docker --no-pager
 systemctl status k3s --no-pager
 systemctl status mlflow --no-pager
+
+echo "Disk usage:"
+df -h /
