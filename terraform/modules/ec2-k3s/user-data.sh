@@ -58,7 +58,8 @@ Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/local/bin/mlflow server \
   --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
   --default-artifact-root s3://${mlflow_bucket}/ \
-  --host 0.0.0.0
+  --host 0.0.0.0 \
+  --gunicorn-opts "--timeout 300 --workers 2 --keep-alive 120"
 WorkingDirectory=/opt/mlflow
 Restart=always
 User=root
