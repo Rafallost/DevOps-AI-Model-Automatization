@@ -33,3 +33,16 @@ variable "dvc_bucket" {
   description = "S3 bucket name for DVC data"
   type        = string
 }
+
+variable "install_monitoring" {
+  description = "Install Prometheus + Grafana monitoring stack"
+  type        = bool
+  default     = false  # Disabled by default to save resources
+}
+
+variable "grafana_password" {
+  description = "Grafana admin password"
+  type        = string
+  default     = "admin"
+  sensitive   = true
+}

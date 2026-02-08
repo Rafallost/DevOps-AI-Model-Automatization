@@ -24,7 +24,9 @@ data "template_file" "user_data" {
   template = file("${path.module}/user-data.sh")
 
   vars = {
-    mlflow_bucket = var.mlflow_bucket
+    mlflow_bucket      = var.mlflow_bucket
+    install_monitoring = var.install_monitoring
+    grafana_password   = var.grafana_password
   }
 }
 

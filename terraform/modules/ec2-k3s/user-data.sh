@@ -73,6 +73,45 @@ systemctl daemon-reload
 systemctl start mlflow
 systemctl enable mlflow
 
+# ── Prometheus + Grafana (Optional Monitoring Stack) ──
+if [ "${install_monitoring}" = "true" ]; then
+  echo "Installing Prometheus + Grafana monitoring stack..."
+
+  # Wait for k3s to be fully ready
+  echo "Waiting for k3s to be ready..."
+  until kubectl get nodes 2>/dev/null | grep -q "Ready"; do
+    sleep 5
+  done
+
+  # Add Helm repository
+  echo "Adding prometheus-community Helm repo..."
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  helm repo update
+
+  # Create monitoring namespace
+  kubectl create namespace monitoring || true
+
+  # Install kube-prometheus-stack
+  echo "Installing kube-prometheus-stack (this may take 2-3 minutes)..."
+  helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+    --namespace monitoring \
+    --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+    --set grafana.adminPassword=${grafana_password} \
+    --set prometheus.prometheusSpec.retention=7d \
+    --set prometheus.prometheusSpec.resources.requests.memory=512Mi \
+    --set prometheus.prometheusSpec.resources.limits.memory=1Gi \
+    --set grafana.resources.requests.memory=128Mi \
+    --set grafana.resources.limits.memory=256Mi \
+    --wait --timeout=5m
+
+  echo "✅ Prometheus + Grafana installed!"
+  echo "   Grafana admin password: ${grafana_password}"
+  echo "   Access Grafana: kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80"
+  echo "   Access Prometheus: kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090"
+else
+  echo "Skipping Prometheus + Grafana installation (install_monitoring=false)"
+fi
+
 # ── Automatic Cleanup & Monitoring ──
 echo "Setting up automatic cleanup..."
 
