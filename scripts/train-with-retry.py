@@ -2,6 +2,15 @@
 """
 Training wrapper with retry logic. Each attempt uses a different random seed.
 
+⚠️  DEPRECATED / UNUSED ⚠️
+This script is NOT used in the current CI/CD pipeline.
+Training retry logic is implemented in .github/workflows/train.yml
+using GitHub Actions matrix strategy with multiple attempts.
+
+This file is kept for reference only.
+
+---
+
 Usage:
     python train-with-retry.py --config WMS/configs/train.yaml --max-retries 3
 

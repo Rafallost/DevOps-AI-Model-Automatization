@@ -2,6 +2,15 @@
 """
 quality-gate.py - Model Quality Gate
 
+⚠️  DEPRECATED / UNUSED ⚠️
+This script is NOT used in the current CI/CD pipeline.
+Quality gate logic is implemented inline in .github/workflows/train.yml
+with dynamic baseline from MLflow Production model.
+
+This file is kept for reference only.
+
+---
+
 Compares new model metrics with baseline thresholds.
 
 Usage:
@@ -35,12 +44,13 @@ def quality_gate(
     """
     threshold_dice = baseline_dice - tolerance
     threshold_iou = baseline_iou - tolerance
-    
+
     dice_pass = current_dice >= threshold_dice
     iou_pass = current_iou >= threshold_iou
-    
+
     passed = dice_pass and iou_pass
-    improved = current_dice > baseline_dice or current_iou > baseline_iou
+    # Improved = BOTH metrics better than baseline (strict improvement)
+    improved = current_dice > baseline_dice and current_iou > baseline_iou
     
     result = {
         "passed": passed,
@@ -130,9 +140,9 @@ def main():
     parser = argparse.ArgumentParser(description="Model quality gate")
     parser.add_argument("--dice", type=float, required=True, help="Current Dice score")
     parser.add_argument("--iou", type=float, required=True, help="Current IoU score")
-    parser.add_argument("--baseline-dice", type=float, default=0.9275, help="Baseline Dice")
-    parser.add_argument("--baseline-iou", type=float, default=0.8865, help="Baseline IoU")
-    parser.add_argument("--tolerance", type=float, default=0.02, help="Acceptable degradation")
+    parser.add_argument("--baseline-dice", type=float, required=True, help="Baseline Dice (fetch from MLflow Production model)")
+    parser.add_argument("--baseline-iou", type=float, required=True, help="Baseline IoU (fetch from MLflow Production model)")
+    parser.add_argument("--tolerance", type=float, default=0.0, help="Acceptable degradation (0.0 = strict improvement required)")
     parser.add_argument("--output", type=str, help="Output JSON file")
     
     args = parser.parse_args()
