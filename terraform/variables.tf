@@ -47,3 +47,16 @@ variable "github_repo" {
   type        = string
   default     = "Rafallost/Water-Meters-Segmentation-Autimatization"
 }
+
+variable "install_monitoring" {
+  description = "Whether to install Prometheus + Grafana monitoring stack"
+  type        = bool
+  default     = false
+}
+
+variable "grafana_password" {
+  description = "Admin password for Grafana (change in production)"
+  type        = string
+  sensitive   = true
+  default     = "admin"
+}

@@ -66,4 +66,8 @@ module "ec2" {
   key_name          = var.key_name
   mlflow_bucket     = var.mlflow_bucket
   dvc_bucket        = var.dvc_bucket
+
+  # Monitoring stack (optional)
+  install_monitoring = var.install_monitoring
+  grafana_password   = var.grafana_password
 }
