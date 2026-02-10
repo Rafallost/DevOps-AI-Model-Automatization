@@ -11,19 +11,27 @@
 
 ## Core System Flow
 
-**This is the heart of the project.** Everything we build serves this flow:
+**This is the heart of the project** (Simplified Pipeline - implemented 2026-02-10):
 
 ```
-USER uploads data → DATA QA → [FAIL: error message]
-                           → [PASS: proceed to PR-based workflow]
+USER uploads data → PRE-PUSH HOOK (merges with S3 data, creates data/TIMESTAMP branch)
+                           ↓
+                        DATA QA → [FAIL: error message]
+                           → [PASS: create PR]
                                     ↓
-                              TRAINING (up to 3 attempts)
+                              TRAINING (single run on full merged dataset)
                                     ↓
-                              QUALITY GATE (metrics + smoke tests)
+                              QUALITY GATE (compare vs dynamic MLflow baseline)
                                     ↓
-                    [WORSE after 3 tries: reject PR with comment]
-                    [BETTER: approve + merge → BUILD → DEPLOY]
+                    [NOT IMPROVED: reject PR with comment]
+                    [IMPROVED: promote to Production → auto-approve → auto-merge]
 ```
+
+**Key changes from original plan:**
+- Pre-push hook downloads S3 data and merges locally (every training uses full dataset)
+- Single training run (10-15 min) instead of 3 attempts (30-45 min) → 66% faster
+- Dynamic baseline from MLflow Production model (not hardcoded)
+- Auto-deployment in workflow for validation + manual scripts for actual usage
 
 > This file provides context for AI assistants (Claude, Copilot, etc.) working on this project.
 > Read this file completely before starting any work.
