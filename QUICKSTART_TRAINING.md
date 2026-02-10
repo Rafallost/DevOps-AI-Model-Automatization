@@ -209,7 +209,7 @@ After successful test:
 
 ## 💰 Cost Reminder
 
-- **Training cost**: ~$0.0832/hour for EC2 (t3.large)
+- **Training cost**: ~$0.0832/hour for EC2 (t3.xlarge)
 - **10-15 min training** ≈ $0.015 per run
 - **Stop EC2 when not training** to save costs
 
