@@ -25,7 +25,7 @@ while read local_ref local_sha remote_ref remote_sha; do
   if [[ "$remote_ref" == "refs/heads/main" ]]; then
 
     # Detect raw training images/masks (not .dvc metadata files)
-    RAW_FILES=$(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null | \
+    RAW_FILES=$(git diff --name-only --diff-filter=A "$remote_sha" "$local_sha" 2>/dev/null | \
                 grep -E "^WMS/data/training/(images|masks)/.*\.(jpg|jpeg|png)$" || true)
 
     if [ -n "$RAW_FILES" ]; then
