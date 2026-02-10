@@ -8,6 +8,7 @@
 4. Keep the core system flow described below.
 5. Code inserts in the plan.md file are more of an illustrative idea and a starting point than a sacred law
 6. **Implementation phases, ordering, and priorities are defined in `PLAN.md` and take precedence over any phase descriptions here.**
+7. Podczas pisania teksów nie używaj tych głupich potrójnych znaów "---". Staraj się pisać prostymi ale sensownymi zdaniami
 
 ## Core System Flow
 

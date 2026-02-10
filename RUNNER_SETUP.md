@@ -3,6 +3,7 @@
 ## Overview
 
 This guide explains how to install and configure a GitHub Actions self-hosted runner on the EC2 instance. The runner will execute training workflows directly on EC2, giving them access to:
+
 - MLflow server (localhost:5000)
 - k3s cluster (localhost:6443)
 - AWS resources via IAM instance profile
@@ -10,7 +11,7 @@ This guide explains how to install and configure a GitHub Actions self-hosted ru
 
 ## Prerequisites
 
-- EC2 instance running (Phase 5 complete)
+- EC2 instance running
 - SSH access to EC2
 - GitHub repository admin access
 
@@ -161,17 +162,20 @@ sudo ./svc.sh uninstall
 ### Runner not appearing in GitHub
 
 **Check runner service status:**
+
 ```bash
 sudo ./svc.sh status
 ```
 
 **Restart runner:**
+
 ```bash
 sudo ./svc.sh stop
 sudo ./svc.sh start
 ```
 
 **Check logs for errors:**
+
 ```bash
 sudo journalctl -u actions.runner.* -n 50
 ```
@@ -179,12 +183,14 @@ sudo journalctl -u actions.runner.* -n 50
 ### Workflow fails with "No such file or directory"
 
 **Ensure Python 3.12 is available:**
+
 ```bash
 python3 --version
 which python3
 ```
 
 **Check PATH in runner environment:**
+
 ```bash
 # Add to ~/.bashrc if needed
 export PATH="/usr/bin:$PATH"
@@ -193,11 +199,13 @@ export PATH="/usr/bin:$PATH"
 ### DVC pull fails
 
 **Ensure AWS credentials are configured:**
+
 ```bash
 aws sts get-caller-identity
 ```
 
 **Check S3 access:**
+
 ```bash
 aws s3 ls s3://wms-training-data-<ACCOUNT_ID>/
 ```
@@ -205,11 +213,13 @@ aws s3 ls s3://wms-training-data-<ACCOUNT_ID>/
 ### MLflow connection fails
 
 **Check MLflow is running:**
+
 ```bash
 curl http://localhost:5000/health
 ```
 
 **If not running, start it:**
+
 ```bash
 cd ~/mlflow
 mlflow server \
@@ -238,6 +248,7 @@ mlflow server \
 ## Next Steps
 
 After runner is installed:
+
 1. ✅ Test training workflow manually
 2. Create a PR with data changes to trigger automatic training
 3. Verify model registration to MLflow
