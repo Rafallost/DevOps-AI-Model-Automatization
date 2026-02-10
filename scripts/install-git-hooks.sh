@@ -109,7 +109,10 @@ Timestamp: $TIMESTAMP"
       echo ""
       echo "ℹ️  No AWS credentials needed - merging happens in GitHub Actions!"
       echo ""
-
+      echo " Below error is NORMAL and should be ignored: ❌"
+      echo ""
+      echo "error: failed to push some refs to 'https://github.com/Rafallost/Water-Meters-Segmentation-Autimatization.git'"
+      echo ""
       git checkout "$CURRENT_BRANCH"
       exit 1  # Block push to main
     fi
