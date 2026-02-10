@@ -30,11 +30,20 @@ echo "Installing k3s..."
 # Skip SELinux RPM due to dependency conflict on Amazon Linux 2
 # (container-selinux version mismatch with selinux-policy-targeted)
 curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_SELINUX_RPM=true sh -
-# Make kubeconfig readable by non-root users
-chmod 644 /etc/rancher/k3s/k3s.yaml
-# Set KUBECONFIG and kubectl alias for ec2-user
-echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/ec2-user/.bashrc
+
+# Setup kubeconfig for ec2-user (standard location for kubectl/helm/GitHub Actions)
+echo "Setting up kubeconfig for ec2-user..."
+mkdir -p /home/ec2-user/.kube
+cp /etc/rancher/k3s/k3s.yaml /home/ec2-user/.kube/config
+chown -R ec2-user:ec2-user /home/ec2-user/.kube
+chmod 600 /home/ec2-user/.kube/config
+
+# Set KUBECONFIG for interactive sessions
+echo 'export KUBECONFIG=/home/ec2-user/.kube/config' >> /home/ec2-user/.bashrc
 echo 'alias kubectl="/usr/local/bin/k3s kubectl"' >> /home/ec2-user/.bashrc
+
+# Make kubeconfig available globally for systemd services (like GitHub Actions runner)
+echo 'KUBECONFIG=/home/ec2-user/.kube/config' >> /etc/environment
 
 # ── Helm ──
 echo "Installing Helm..."
