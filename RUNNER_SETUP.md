@@ -229,7 +229,7 @@ mlflow server \
 ## Cost Implications
 
 - **Runner itself**: Free (self-hosted)
-- **EC2 while runner is active**: Standard t3.xlarge cost ($0.0832/hour)
+- **EC2 while runner is active**: Standard t3.large cost ($0.0416/hour)
 - **Data transfer**: DVC pull from S3 (egress charges)
 - **S3 storage**: MLflow artifacts
 

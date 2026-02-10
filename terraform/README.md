@@ -5,7 +5,7 @@ This Terraform configuration provisions all AWS resources for the Water Meter Se
 ## What Gets Created
 
 - **VPC**: Single public subnet, internet gateway, security group
-- **EC2**: t3.small instance with k3s, Docker, Helm, MLflow
+- **EC2**: t3.large instance with k3s, Docker, Helm, MLflow
 - **S3**: Two buckets (DVC data, MLflow artifacts)
 - **ECR**: Docker image registry
 - **IAM**: GitHub Actions OIDC role for CI/CD
@@ -224,7 +224,7 @@ Monitoring is **disabled by default** to save resources (~500MB RAM). Enable it 
 Add to your `terraform.tfvars` (in main repo):
 
 ```hcl
-# Optional monitoring (requires t3.medium minimum, recommended t3.xlarge)
+# Optional monitoring (requires t3.medium minimum, recommended t3.large)
 install_monitoring = true
 grafana_password   = "your-secure-password"  # Change this!
 ```
@@ -303,7 +303,8 @@ kubectl delete namespace monitoring
 | **Total** | ~300m | ~750MB | ~2.1GB |
 
 **Minimum:** t3.medium (4GB RAM)
-**Recommended:** t3.xlarge (8GB RAM) - used in this project
+**Recommended:** t3.large (8GB RAM) - used in this project (AWS Academy limit)
+**Production:** t3.xlarge (16GB RAM) - ideal but not available in AWS Academy
 
 ---
 
