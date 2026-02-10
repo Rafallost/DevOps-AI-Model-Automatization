@@ -66,7 +66,7 @@ Wants=network-online.target
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/local/bin/mlflow server \
   --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
-  --default-artifact-root s3://${mlflow_bucket}/ \
+  --default-artifact-root file:///opt/mlflow/artifacts \
   --host 0.0.0.0 \
   --workers 2 \
   --gunicorn-opts "--timeout 300 --keep-alive 120"
