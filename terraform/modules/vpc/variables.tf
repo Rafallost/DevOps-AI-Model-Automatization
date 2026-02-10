@@ -20,7 +20,4 @@ variable "availability_zone" {
   type        = string
 }
 
-variable "my_ip" {
-  description = "Your IP address with /32 suffix for SSH access"
-  type        = string
-}
+# my_ip variable removed - now auto-detected via HTTP data source in my_ip.tf

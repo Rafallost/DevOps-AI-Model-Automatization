@@ -21,9 +21,9 @@ provider "aws" {
 module "vpc" {
   source = "./modules/vpc"
 
-  project_name       = var.project_name
-  availability_zone  = var.availability_zone
-  my_ip              = var.my_ip
+  project_name      = var.project_name
+  availability_zone = var.availability_zone
+  # my_ip is now auto-detected via HTTP data source in the module
 }
 
 # S3 Buckets Module

@@ -56,22 +56,22 @@ resource "aws_security_group" "ec2" {
   description = "Security group for EC2 instance running k3s and MLflow"
   vpc_id      = aws_vpc.main.id
 
-  # SSH - from your IP only
+  # SSH - from your IP only (auto-detected)
   ingress {
-    description = "SSH from my IP"
+    description = "SSH from my IP (auto-detected)"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = [local.my_ip_cidr]
   }
 
   # HTTP (FastAPI serving) - from your IP only for manual testing
   ingress {
-    description = "HTTP from my IP"
+    description = "HTTP from my IP (auto-detected)"
     from_port   = 8000
     to_port     = 8000
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
+    cidr_blocks = [local.my_ip_cidr]
   }
 
   # MLflow - open for GitHub Actions (ephemeral infrastructure)

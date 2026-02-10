@@ -22,10 +22,7 @@ variable "instance_type" {
   default     = "t3.large"  # 8GB RAM, stable for ML workloads with PyTorch
 }
 
-variable "my_ip" {
-  description = "Your IP address with /32 suffix (e.g., 1.2.3.4/32)"
-  type        = string
-}
+# my_ip variable removed - now auto-detected via HTTP data source in vpc module
 
 variable "key_name" {
   description = "Name of existing EC2 key pair"
