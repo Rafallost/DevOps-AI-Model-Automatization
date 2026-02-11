@@ -9,6 +9,7 @@
 5. Code inserts in the plan.md file are more of an illustrative idea and a starting point than a sacred law
 6. **Implementation phases, ordering, and priorities are defined in `PLAN.md` and take precedence over any phase descriptions here.**
 7. Podczas pisania teksów nie używaj tych głupich potrójnych znaów "---". Staraj się pisać prostymi ale sensownymi zdaniami
+8. NIE DODAWAJ /images i /masks nigdy do .gitignore ponieważ musi być te folder widoczny żeby móc tam dane wrzucać!!!
 
 ## Core System Flow
 
@@ -29,6 +30,7 @@ USER uploads data → PRE-PUSH HOOK (merges with S3 data, creates data/TIMESTAMP
 ```
 
 **Key changes from original plan:**
+
 - Pre-push hook downloads S3 data and merges locally (every training uses full dataset)
 - Single training run (10-15 min) instead of 3 attempts (30-45 min) → 66% faster
 - Dynamic baseline from MLflow Production model (not hardcoded)
