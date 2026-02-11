@@ -10,6 +10,7 @@
 6. **Implementation phases, ordering, and priorities are defined in `PLAN.md` and take precedence over any phase descriptions here.**
 7. Podczas pisania teksów nie używaj tych głupich potrójnych znaów "---". Staraj się pisać prostymi ale sensownymi zdaniami
 8. NIE DODAWAJ /images i /masks nigdy do .gitignore ponieważ musi być te folder widoczny żeby móc tam dane wrzucać!!!
+9. Never push with --no-verify without my acknowlage. Allways before pushing into main directly check whether you are not pushing data training photos by mistake
 
 ## Core System Flow
 
