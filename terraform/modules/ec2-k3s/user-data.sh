@@ -54,15 +54,22 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 echo "Installing MLflow..."
 # Amazon Linux 2023 has OpenSSL 3.0, so no urllib3 pinning needed
 # Amazon Linux 2 needs urllib3<2.0 due to older OpenSSL
+# Use --ignore-installed to avoid conflicts with system packages (requests, urllib3)
 if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
   echo "Detected Amazon Linux 2023 - installing MLflow with urllib3 v2.0 support"
-  pip3 install mlflow boto3
+  pip3 install --ignore-installed mlflow boto3 || {
+    echo "Warning: MLflow installation had errors, but continuing..."
+  }
 else
   echo "Detected Amazon Linux 2 - pinning urllib3<2.0 for OpenSSL compatibility"
-  pip3 install mlflow boto3 'urllib3<2.0'
+  pip3 install --ignore-installed mlflow boto3 'urllib3<2.0' || {
+    echo "Warning: MLflow installation had errors, but continuing..."
+  }
 fi
 
+# Create MLflow directory (MUST exist before service starts)
 mkdir -p /opt/mlflow
+echo "✅ MLflow directory created at /opt/mlflow"
 
 # Create MLflow systemd service with S3 artifact storage
 cat > /etc/systemd/system/mlflow.service <<EOF
@@ -192,29 +199,39 @@ CRON_EOF
 # Run initial cleanup
 /usr/local/bin/cleanup-k3s.sh
 
-# ── GitHub Actions Runner Dependencies (for AL2023) ──
+# ── GitHub Actions Runner Dependencies ──
 echo "Installing GitHub Actions runner dependencies..."
 if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
   echo "Detected Amazon Linux 2023 - installing .NET Core 6.0 dependencies"
 
   # Install libicu (CRITICAL - required for .NET Core 6.0)
-  echo "Installing libicu..."
-  dnf install -y libicu
+  echo "Installing libicu with dnf..."
+  dnf install -y libicu || {
+    echo "❌ Failed to install libicu - trying with yum..."
+    yum install -y libicu || echo "❌ libicu installation failed completely"
+  }
 
   # Verify installation
   if rpm -q libicu > /dev/null 2>&1; then
-    echo "✅ libicu installed successfully"
+    echo "✅ libicu installed successfully ($(rpm -q libicu))"
   else
-    echo "❌ Failed to install libicu - GitHub runner may not work"
+    echo "❌ libicu not installed - GitHub runner will NOT work"
+    echo "   Manual installation required: sudo dnf install -y libicu"
   fi
 
   # Install dotnet-runtime-6.0 (optional, runner includes embedded runtime)
-  dnf install -y dotnet-runtime-6.0 2>/dev/null || echo "Note: dotnet-runtime-6.0 not in default repos (not critical, runner has embedded runtime)"
+  echo "Attempting to install dotnet-runtime-6.0..."
+  dnf install -y dotnet-runtime-6.0 2>/dev/null && echo "✅ dotnet-runtime-6.0 installed" || echo "ℹ️  dotnet-runtime-6.0 not available (not critical, runner has embedded runtime)"
 
   echo "✅ GitHub Actions runner dependencies installed"
-  echo "   You can now install the runner with: ./config.sh --url ... --token ..."
+  echo "   To install runner: cd ~ec2-user && mkdir actions-runner && cd actions-runner"
+  echo "   Download: curl -o actions-runner-linux-x64-2.331.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.331.0/actions-runner-linux-x64-2.331.0.tar.gz"
+  echo "   Extract: tar xzf actions-runner-linux-x64-2.331.0.tar.gz"
+  echo "   Configure: ./config.sh --url <REPO_URL> --token <TOKEN>"
 else
-  echo "Amazon Linux 2 detected - runner dependencies should work out of the box"
+  echo "Amazon Linux 2 detected - installing runner dependencies..."
+  yum install -y libicu || echo "Warning: libicu installation failed on AL2"
+  echo "✅ Runner dependencies installed for Amazon Linux 2"
 fi
 
 echo "=== User-data script completed at $(date) ==="
