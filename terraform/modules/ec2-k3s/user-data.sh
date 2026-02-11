@@ -196,11 +196,20 @@ CRON_EOF
 echo "Installing GitHub Actions runner dependencies..."
 if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
   echo "Detected Amazon Linux 2023 - installing .NET Core 6.0 dependencies"
-  # Install libicu (required for .NET Core)
-  yum install -y libicu
 
-  # Install dotnet-runtime-6.0 (required for GitHub Actions runner)
-  yum install -y dotnet-runtime-6.0 || echo "Warning: dotnet-runtime-6.0 not available in default repos"
+  # Install libicu (CRITICAL - required for .NET Core 6.0)
+  echo "Installing libicu..."
+  dnf install -y libicu
+
+  # Verify installation
+  if rpm -q libicu > /dev/null 2>&1; then
+    echo "✅ libicu installed successfully"
+  else
+    echo "❌ Failed to install libicu - GitHub runner may not work"
+  fi
+
+  # Install dotnet-runtime-6.0 (optional, runner includes embedded runtime)
+  dnf install -y dotnet-runtime-6.0 2>/dev/null || echo "Note: dotnet-runtime-6.0 not in default repos (not critical, runner has embedded runtime)"
 
   echo "✅ GitHub Actions runner dependencies installed"
   echo "   You can now install the runner with: ./config.sh --url ... --token ..."
