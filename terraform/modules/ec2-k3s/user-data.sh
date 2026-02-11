@@ -1,6 +1,7 @@
 #!/bin/bash
 # EC2 User Data Script - Installs Docker, k3s, Helm, MLflow
 # Runs at instance launch (Amazon Linux 2023)
+# Compatible with both Amazon Linux 2 and Amazon Linux 2023
 
 set -euo pipefail
 
@@ -52,11 +53,19 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 # ── MLflow ──
 echo "Installing MLflow..."
 # Amazon Linux 2023 has OpenSSL 3.0, so no urllib3 pinning needed
-pip3 install mlflow boto3
+# Amazon Linux 2 needs urllib3<2.0 due to older OpenSSL
+if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
+  echo "Detected Amazon Linux 2023 - installing MLflow with urllib3 v2.0 support"
+  pip3 install mlflow boto3
+else
+  echo "Detected Amazon Linux 2 - pinning urllib3<2.0 for OpenSSL compatibility"
+  pip3 install mlflow boto3 'urllib3<2.0'
+fi
+
 mkdir -p /opt/mlflow
 
-# Create MLflow systemd service
-cat > /etc/systemd/system/mlflow.service <<'EOF'
+# Create MLflow systemd service with S3 artifact storage
+cat > /etc/systemd/system/mlflow.service <<EOF
 [Unit]
 Description=MLflow Tracking Server
 After=network-online.target
@@ -66,7 +75,7 @@ Wants=network-online.target
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/local/bin/mlflow server \
   --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
-  --default-artifact-root file:///opt/mlflow/artifacts \
+  --default-artifact-root s3://${mlflow_bucket}/ \
   --host 0.0.0.0 \
   --workers 2 \
   --gunicorn-opts "--timeout 300 --keep-alive 120"
@@ -182,6 +191,22 @@ CRON_EOF
 
 # Run initial cleanup
 /usr/local/bin/cleanup-k3s.sh
+
+# ── GitHub Actions Runner Dependencies (for AL2023) ──
+echo "Installing GitHub Actions runner dependencies..."
+if grep -q "Amazon Linux 2023" /etc/os-release 2>/dev/null; then
+  echo "Detected Amazon Linux 2023 - installing .NET Core 6.0 dependencies"
+  # Install libicu (required for .NET Core)
+  yum install -y libicu
+
+  # Install dotnet-runtime-6.0 (required for GitHub Actions runner)
+  yum install -y dotnet-runtime-6.0 || echo "Warning: dotnet-runtime-6.0 not available in default repos"
+
+  echo "✅ GitHub Actions runner dependencies installed"
+  echo "   You can now install the runner with: ./config.sh --url ... --token ..."
+else
+  echo "Amazon Linux 2 detected - runner dependencies should work out of the box"
+fi
 
 echo "=== User-data script completed at $(date) ==="
 echo "Services status:"
