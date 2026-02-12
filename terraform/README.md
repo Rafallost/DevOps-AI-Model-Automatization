@@ -39,6 +39,7 @@ aws configure
 ### 3. Create SSH Key Pair
 
 **In AWS Console:**
+
 1. Go to EC2 → Key Pairs → Create key pair
 2. Name: `wms-ssh-key` (or your choice)
 3. Type: RSA
@@ -103,6 +104,7 @@ terraform plan -var-file=../../Water-Meters-Segmentation-Autimatization/infrastr
 ```
 
 **CRITICAL: Read the entire plan output. Verify:**
+
 - [ ] 1 VPC + 1 subnet + 1 internet gateway + 1 route table
 - [ ] 1 security group with SSH (22) and HTTP (8000) from your IP
 - [ ] 1 EC2 instance (t3.small)
@@ -133,11 +135,13 @@ terraform output
 ```
 
 **IMPORTANT: Save these values:**
+
 - `ec2_instance_id`: For starting/stopping EC2
 - `ec2_public_ip`: For SSH and MLflow access
 - `github_actions_role_arn`: Already in your workflows
 
 Example output:
+
 ```
 ec2_instance_id = "i-0123456789abcdef0"
 ec2_public_ip   = "3.120.45.67"
@@ -183,7 +187,7 @@ cd Water-Meters-Segmentation-Autimatization
 
 # Update DVC remote (already configured, just verifying)
 dvc remote list
-# Should show: s3remote s3://wms-dvc-data-036136800740/dvc
+# Should show: s3remote s3://wms-dvc-data-055677744286/dvc
 
 # First push (uploads training data to S3)
 dvc push
@@ -240,6 +244,7 @@ terraform apply -var-file=../../Water-Meters-Segmentation-Autimatization/infrast
 After EC2 starts (~3 minutes for monitoring stack to be ready):
 
 **Grafana (Dashboards):**
+
 ```bash
 ssh -i ~/.ssh/labsuser.pem -L 3000:localhost:3000 ec2-user@<EC2_IP>
 # In another terminal:
@@ -250,6 +255,7 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
 ```
 
 **Prometheus (Metrics):**
+
 ```bash
 kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
 # Open browser: http://localhost:9090
@@ -258,6 +264,7 @@ kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:909
 ### Pre-Built Dashboards
 
 Grafana comes with dashboards for:
+
 - **Kubernetes / Compute Resources / Pod** - Pod CPU/RAM usage
 - **Kubernetes / Compute Resources / Namespace** - Namespace overview
 - **Prometheus / Overview** - Prometheus server stats
@@ -265,6 +272,7 @@ Grafana comes with dashboards for:
 ### Custom Dashboard for ML Model
 
 In Grafana:
+
 1. **Dashboards** → **New** → **New Dashboard**
 2. Add panels for:
    - `wms_predictions_total` - Total predictions
@@ -282,11 +290,13 @@ install_monitoring = false
 ```
 
 Then:
+
 ```bash
 terraform apply -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
 ```
 
 Or manually:
+
 ```bash
 ssh -i ~/.ssh/labsuser.pem ec2-user@<EC2_IP>
 helm uninstall kube-prometheus-stack --namespace monitoring
@@ -295,12 +305,12 @@ kubectl delete namespace monitoring
 
 ### Resource Impact
 
-| Component | CPU | RAM | Disk |
-|-----------|-----|-----|------|
+| Component  | CPU   | RAM    | Disk                   |
+| ---------- | ----- | ------ | ---------------------- |
 | Prometheus | ~200m | ~512MB | ~2GB (7-day retention) |
-| Grafana | ~50m | ~128MB | ~100MB |
-| Exporters | ~50m | ~100MB | - |
-| **Total** | ~300m | ~750MB | ~2.1GB |
+| Grafana    | ~50m  | ~128MB | ~100MB                 |
+| Exporters  | ~50m  | ~100MB | -                      |
+| **Total**  | ~300m | ~750MB | ~2.1GB                 |
 
 **Minimum:** t3.medium (4GB RAM)
 **Recommended:** t3.large (8GB RAM) - used in this project (AWS Academy limit)
@@ -343,15 +353,17 @@ Then verify in AWS Console that ZERO resources remain.
 ### User-data script failed
 
 SSH into EC2 and check logs:
+
 ```bash
 sudo cat /var/log/user-data.log
 ```
 
 If MLflow or k3s didn't start, run manual setup:
+
 ```bash
 cd devops/scripts
 ./setup-k3s.sh
-./setup-mlflow.sh wms-mlflow-artifacts-036136800740
+./setup-mlflow.sh wms-mlflow-artifacts-055677744286
 ```
 
 ### Can't SSH
@@ -371,6 +383,7 @@ cd devops/scripts
 ## Cost Monitoring
 
 Check spending daily:
+
 ```bash
 aws ce get-cost-and-usage \
   --time-period Start=2026-02-01,End=2026-02-28 \
