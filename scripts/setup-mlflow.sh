@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-MLFLOW_BUCKET="${1:-wms-mlflow-artifacts-036136800740}"
+MLFLOW_BUCKET="${1:-wms-mlflow-artifacts-055677744286}"
 
 echo "=== Installing MLflow ==="
 pip3 install mlflow boto3
