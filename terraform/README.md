@@ -1,395 +1,118 @@
-# Phase 5: AWS Infrastructure Deployment
+# terraform/
 
-This Terraform configuration provisions all AWS resources for the Water Meter Segmentation MLOps project.
+Infrastruktura AWS jako kod. Całość opiera się na jednej instancji EC2 z k3s — świadomy kompromis budżetowy zamiast EKS/RDS/NAT Gateway.
 
-## What Gets Created
+## Struktura
 
-- **VPC**: Single public subnet, internet gateway, security group
-- **EC2**: t3.large instance with k3s, Docker, Helm, MLflow
-- **S3**: Two buckets (DVC data, MLflow artifacts)
-- **ECR**: Docker image registry
-- **IAM**: GitHub Actions OIDC role for CI/CD
-
-**Estimated cost**: $2-3 for 4 days of testing
-
----
-
-## Prerequisites
-
-### 1. Install Terraform
-
-```bash
-# Windows (using Chocolatey)
-choco install terraform
-
-# Or download from: https://www.terraform.io/downloads
+```
+terraform/
+├── main.tf         # korzeń: wywołuje moduły, konfiguruje providera
+├── variables.tf    # zmienne wejściowe (region, instance type, nazwy bucketów)
+├── outputs.tf      # adresy, URL-e, komendy SSH po apply
+└── modules/
+    ├── vpc/            # sieć: VPC, subnet, IGW, security group
+    ├── s3-mlops/       # storage: dwa buckety S3 (DVC + MLflow)
+    ├── ecr/            # rejestr Docker dla obrazów modelu
+    ├── ec2-k3s/        # instancja EC2 z k3s, MLflow, GitHub Actions runner
+    └── iam-github-oidc/  # OIDC dla GitHub Actions (wyłączony w AWS Academy)
 ```
 
-### 2. Configure AWS CLI
+## Moduły
+
+### vpc
+Minimalna sieć publiczna (brak NAT Gateway — koszt ~$32/mies.):
+- VPC `10.0.0.0/16` + jeden public subnet `10.0.1.0/24`
+- Security group: SSH (22) i FastAPI (8000) tylko z IP użytkownika (auto-detect), MLflow (5000) otwarty na `0.0.0.0/0` (potrzebne dla GitHub Actions)
+
+### s3-mlops
+Dwa oddzielne buckety z włączonym wersjonowaniem i zablokowanym dostępem publicznym:
+- **DVC bucket** — dane treningowe (obrazy + maski), zarządzane przez DVC
+- **MLflow bucket** — artefakty modeli, logi, wykresy z treningu
+
+### ecr
+Rejestr Docker z polityką lifecycle: zatrzymuje ostatnie 5 tagów, starsze usuwa automatycznie. Image scanning wyłączony (koszt). `force_destroy = true` dla czystego `terraform destroy`.
+
+### ec2-k3s
+Główny węzeł obliczeniowy:
+- AMI: Amazon Linux 2023 (wspierany do 2028)
+- Instancja: `t3.large` (8GB RAM) — minimum dla PyTorch images (~9GB skompresowane)
+- Dysk: 100GB gp3 — zwiększony z 40GB po problemach z DiskPressure na k3s
+- IAM: `LabInstanceProfile` (predefiniowany w AWS Academy; własne role IAM zablokowane)
+- Elastic IP dla stabilnego adresu między restartami sesji
+
+User-data przy starcie instaluje: Docker, k3s, Helm, MLflow (systemd), GitHub Actions runner, opcjonalnie Prometheus + Grafana.
+
+### iam-github-oidc
+**Aktualnie wyłączony** w `main.tf` (AWS Academy Learner Lab blokuje tworzenie ról IAM). Moduł gotowy do włączenia w standardowym koncie AWS — definiuje OIDC provider dla `token.actions.githubusercontent.com` i rolę IAM z dostępem do S3 i ECR.
+
+## Użycie
 
 ```bash
-# Install AWS CLI (if not already installed)
-# Download from: https://aws.amazon.com/cli/
+# Inicjalizacja (raz)
+cd terraform && terraform init
 
-# Configure with your credentials
-aws configure
-# Enter: Access Key ID, Secret Access Key, Region: eu-central-1
+# Podgląd zmian
+terraform plan
+
+# Tworzenie infrastruktury
+terraform apply   # lub użyj scripts/deploy-to-cloud.sh
+
+# Niszczenie (pamiętaj o opróżnieniu S3 najpierw)
+terraform destroy   # lub użyj scripts/cleanup-aws.sh
 ```
 
-### 3. Create SSH Key Pair
-
-**In AWS Console:**
-
-1. Go to EC2 → Key Pairs → Create key pair
-2. Name: `wms-ssh-key` (or your choice)
-3. Type: RSA
-4. Format: .pem
-5. Download and save to `~/.ssh/wms-ssh-key.pem`
-
-```bash
-# Set permissions (Linux/Mac)
-chmod 400 ~/.ssh/wms-ssh-key.pem
-
-# Windows: Right-click file → Properties → Security → Advanced
-# Remove all users except yourself, set to Read-only
-```
-
-### 4. Get Your Public IP
-
-```bash
-curl ifconfig.me
-# Copy the output, you'll need it for terraform.tfvars
-```
-
----
-
-## Configuration
-
-Edit `Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars`:
+Wartości zmiennych trzymaj w pliku `terraform.tfvars` (w `.gitignore`):
 
 ```hcl
-my_ip    = "YOUR_IP_HERE/32"  # From curl ifconfig.me
-key_name = "wms-ssh-key"      # Name from AWS Console
+key_name      = "labsuser"
+dvc_bucket    = "wms-dvc-data-<account-id>"
+mlflow_bucket = "wms-mlflow-artifacts-<account-id>"
 ```
 
----
+## Outputs po apply
 
-## Pre-Apply Safety Checklist
+| Output | Przykład |
+|---|---|
+| `ec2_public_ip` | `13.219.216.230` |
+| `mlflow_url` | `http://13.219.216.230:5000` |
+| `ecr_repository_url` | `055677744286.dkr.ecr.eu-central-1.amazonaws.com/wms-model` |
+| `ssh_command` | `ssh -i ~/.ssh/labsuser.pem ec2-user@13.219.216.230` |
 
-**DO NOT run `terraform apply` until ALL boxes are checked:**
+## Monitoring (opcjonalny)
 
-- [ ] AWS billing alert set at $40 threshold (if your account allows)
-- [ ] `my_ip` in terraform.tfvars is YOUR current IP with /32 suffix
-- [ ] `key_name` in terraform.tfvars matches your AWS key pair name
-- [ ] You have the .pem file saved locally
-- [ ] You've reviewed the plan (see step 3 below)
-
----
-
-## Deployment Steps
-
-### 1. Initialize Terraform
-
-```bash
-cd DevOps-AI-Model-Automatization/terraform
-terraform init
-```
-
-Expected output: "Terraform has been successfully initialized!"
-
-### 2. Plan (Review What Will Be Created)
-
-```bash
-terraform plan -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
-```
-
-**CRITICAL: Read the entire plan output. Verify:**
-
-- [ ] 1 VPC + 1 subnet + 1 internet gateway + 1 route table
-- [ ] 1 security group with SSH (22) and HTTP (8000) from your IP
-- [ ] 1 EC2 instance (t3.small)
-- [ ] 1 Elastic IP
-- [ ] 2 S3 buckets with versioning
-- [ ] 1 ECR repository
-- [ ] 1 IAM role + OIDC provider
-- [ ] 1 IAM instance profile
-- [ ] **ZERO NAT Gateways** (would cost $32/month)
-- [ ] **ZERO RDS instances** (would cost $13/month)
-
-If the plan shows ~15-20 resources and NO expensive items, proceed.
-
-### 3. Apply (Create Resources)
-
-```bash
-terraform apply -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
-```
-
-Type `yes` when prompted.
-
-**This is when AWS charges begin.** Application takes ~5 minutes.
-
-### 4. Save Outputs
-
-```bash
-terraform output
-```
-
-**IMPORTANT: Save these values:**
-
-- `ec2_instance_id`: For starting/stopping EC2
-- `ec2_public_ip`: For SSH and MLflow access
-- `github_actions_role_arn`: Already in your workflows
-
-Example output:
-
-```
-ec2_instance_id = "i-0123456789abcdef0"
-ec2_public_ip   = "3.120.45.67"
-mlflow_url      = "http://3.120.45.67:5000"
-ssh_command     = "ssh -i ~/.ssh/wms-ssh-key.pem ec2-user@3.120.45.67"
-```
-
----
-
-## Verification
-
-### 1. SSH into EC2
-
-```bash
-# Use the ssh_command from terraform output
-ssh -i ~/.ssh/wms-ssh-key.pem ec2-user@<PUBLIC_IP>
-```
-
-### 2. Check Services
-
-```bash
-# On EC2
-sudo systemctl status mlflow
-sudo systemctl status k3s
-kubectl get nodes
-docker --version
-helm version
-```
-
-All should show as active/running.
-
-### 3. Access MLflow UI
-
-Open browser: `http://<PUBLIC_IP>:5000`
-
-Should see MLflow tracking UI (no experiments yet - that's normal).
-
-### 4. Test DVC Push
-
-```bash
-# On your local machine, in working repo
-cd Water-Meters-Segmentation-Autimatization
-
-# Update DVC remote (already configured, just verifying)
-dvc remote list
-# Should show: s3remote s3://wms-dvc-data-055677744286/dvc
-
-# First push (uploads training data to S3)
-dvc push
-```
-
-This uploads ~9 images (~1 MB). First real AWS cost: ~$0.01.
-
----
-
-## Daily Usage
-
-### Start EC2 (Before Working)
-
-```bash
-aws ec2 start-instances --instance-ids <INSTANCE_ID> --region eu-central-1
-
-# Wait ~2 minutes, then SSH
-```
-
-### Stop EC2 (After Working)
-
-```bash
-aws ec2 stop-instances --instance-ids <INSTANCE_ID> --region eu-central-1
-```
-
-**Stopped EC2 = $0/hour compute, but EIP still costs $0.005/hour.**
-
-For breaks longer than 1 day, consider releasing the EIP (see PLAN.md budget rules).
-
----
-
-## Optional: Enable Prometheus + Grafana Monitoring
-
-Monitoring is **disabled by default** to save resources (~500MB RAM). Enable it for production-like deployments.
-
-### Enable Monitoring
-
-Add to your `terraform.tfvars` (in main repo):
-
-```hcl
-# Optional monitoring (requires t3.medium minimum, recommended t3.large)
-install_monitoring = true
-grafana_password   = "your-secure-password"  # Change this!
-```
-
-Then apply:
-
-```bash
-terraform apply -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
-```
-
-### Access Dashboards
-
-After EC2 starts (~3 minutes for monitoring stack to be ready):
-
-**Grafana (Dashboards):**
-
-```bash
-ssh -i ~/.ssh/labsuser.pem -L 3000:localhost:3000 ec2-user@<EC2_IP>
-# In another terminal:
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
-
-# Open browser: http://localhost:3000
-# Login: admin / <your-grafana-password>
-```
-
-**Prometheus (Metrics):**
-
-```bash
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
-# Open browser: http://localhost:9090
-```
-
-### Pre-Built Dashboards
-
-Grafana comes with dashboards for:
-
-- **Kubernetes / Compute Resources / Pod** - Pod CPU/RAM usage
-- **Kubernetes / Compute Resources / Namespace** - Namespace overview
-- **Prometheus / Overview** - Prometheus server stats
-
-### Custom Dashboard for ML Model
-
-In Grafana:
-
-1. **Dashboards** → **New** → **New Dashboard**
-2. Add panels for:
-   - `wms_predictions_total` - Total predictions
-   - `wms_predict_latency_seconds` - Prediction latency (p50, p95, p99)
-   - `container_memory_usage_bytes{pod=~"wms-model.*"}` - Model pod RAM
-   - `rate(wms_predictions_total[5m])` - Predictions per second
-
-### Disable Monitoring
-
-To remove monitoring (frees ~500MB RAM):
+Prometheus + Grafana wyłączone domyślnie (~750MB RAM, ~2GB dysku). Włączenie:
 
 ```hcl
 # terraform.tfvars
-install_monitoring = false
+install_monitoring = true
+grafana_password   = "haslo"
 ```
 
-Then:
-
+Dashboardy dostępne przez SSH tunnel:
 ```bash
-terraform apply -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
+ssh -L 3000:localhost:3000 ec2-user@<EC2_IP>
+kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+# http://localhost:3000  (admin / <grafana_password>)
 ```
 
-Or manually:
+## Ograniczenia AWS Academy
 
-```bash
-ssh -i ~/.ssh/labsuser.pem ec2-user@<EC2_IP>
-helm uninstall kube-prometheus-stack --namespace monitoring
-kubectl delete namespace monitoring
-```
-
-### Resource Impact
-
-| Component  | CPU   | RAM    | Disk                   |
-| ---------- | ----- | ------ | ---------------------- |
-| Prometheus | ~200m | ~512MB | ~2GB (7-day retention) |
-| Grafana    | ~50m  | ~128MB | ~100MB                 |
-| Exporters  | ~50m  | ~100MB | -                      |
-| **Total**  | ~300m | ~750MB | ~2.1GB                 |
-
-**Minimum:** t3.medium (4GB RAM)
-**Recommended:** t3.large (8GB RAM) - used in this project (AWS Academy limit)
-**Production:** t3.xlarge (16GB RAM) - ideal but not available in AWS Academy
-
----
-
-## Next Steps
-
-After Phase 5 is complete:
-
-1. **Set up self-hosted GitHub Actions runner** (see PLAN.md Phase 5.8)
-2. **Proceed to Phase 6**: Docker + Helm deployment
-3. **Update working repo DVC remote**: Already done via Phase 1
-
----
-
-## Cleanup (After Project Completion)
-
-**WARNING: This destroys ALL resources and stops all charges.**
-
-```bash
-cd devops
-./scripts/cleanup-aws.sh
-```
-
-Or manually:
-
-```bash
-cd terraform
-terraform destroy -var-file=../../Water-Meters-Segmentation-Autimatization/infrastructure/terraform.tfvars
-```
-
-Then verify in AWS Console that ZERO resources remain.
-
----
+- Sesje wygasają co ~4h — EC2 może zmienić IP (Elastic IP temu zapobiega)
+- Brak uprawnień do tworzenia ról IAM — stąd `LabInstanceProfile` i wyłączony moduł OIDC
+- `s3:PutObject` zablokowany dla lokalnych credentiali — upload danych tylko przez GitHub Actions
+- Klucz SSH: `~/.ssh/labsuser.pem`
 
 ## Troubleshooting
 
-### User-data script failed
-
-SSH into EC2 and check logs:
-
+**User-data script failed** — sprawdź logi na EC2:
 ```bash
 sudo cat /var/log/user-data.log
 ```
 
-If MLflow or k3s didn't start, run manual setup:
-
+**MLflow lub k3s nie wystartował** — uruchom ręcznie:
 ```bash
-cd devops/scripts
-./setup-k3s.sh
-./setup-mlflow.sh wms-mlflow-artifacts-055677744286
+./scripts/setup-k3s.sh
+./scripts/setup-mlflow.sh
 ```
 
-### Can't SSH
-
-- Check security group allows port 22 from your IP
-- Verify .pem file permissions (400 on Linux/Mac)
-- Confirm you're using correct IP (EIP, not instance IP)
-
-### Terraform errors
-
-- `Error: InvalidKeyPair.NotFound` → key_name doesn't exist in AWS
-- `Error: UnauthorizedOperation` → AWS credentials not configured
-- `Error: BucketAlreadyExists` → S3 bucket name collision (append different suffix)
-
----
-
-## Cost Monitoring
-
-Check spending daily:
-
-```bash
-aws ce get-cost-and-usage \
-  --time-period Start=2026-02-01,End=2026-02-28 \
-  --granularity DAILY \
-  --metrics UnblendedCost \
-  --region us-east-1
-```
-
-Or: AWS Console → Billing Dashboard
+**S3 BucketAlreadyExists** — nazwy bucketów muszą być globalnie unikalne; dodaj suffix z account ID.
