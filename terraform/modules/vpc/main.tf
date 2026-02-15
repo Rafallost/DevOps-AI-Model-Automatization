@@ -74,6 +74,15 @@ resource "aws_security_group" "ec2" {
     cidr_blocks = [local.my_ip_cidr]
   }
 
+  # k3s NodePort range - for accessing deployed services (e.g. wms-model UI)
+  ingress {
+    description = "k3s NodePort services from my IP"
+    from_port   = 30000
+    to_port     = 32767
+    protocol    = "tcp"
+    cidr_blocks = [local.my_ip_cidr]
+  }
+
   # MLflow - open for GitHub Actions (ephemeral infrastructure)
   ingress {
     description = "MLflow from anywhere (for GitHub Actions)"
