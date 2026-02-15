@@ -1,0 +1,47 @@
+\newcommand{\setFaculty}[1]{\newcommand{\faculty}{#1}}
+\newcommand{\setDepartment}[1]{\newcommand{\department}{#1}}
+\newcommand{\setSupervisor}[1]{\newcommand{\supervisor}{#1}}
+\newcommand{\setTitleang}[1]{\newcommand{\Titleang}{#1}}
+\newcommand{\setMajor}[1]{\newcommand{\major}{#1}}
+\newcommand{\setWorkType}[1]{\newcommand{\worktype}{#1}}
+\newcommand{\setPlaceYear}[1]{\newcommand{\placeyear}{#1}}
+
+\makeatletter
+\renewcommand{\maketitle}{%
+\begin{titlepage}
+  \thispagestyle{empty}
+
+  \begin{center}
+    % Preferuj PDF (wektor). Jeśli nie ma, użyj JPG.
+    \IfFileExists{img/logo_AGH.pdf}
+      {\includegraphics[width=\textwidth]{img/00_title/logo_AGH.jpg}}
+      {\includegraphics[width=\textwidth]{img/00_title/logo_AGH.jpg}}\\[2mm]
+
+    {\bf\sf \MakeUppercase{\faculty}}\\[5mm]
+    {\bf\sf \MakeUppercase{\department}}\\[14mm]
+
+    {\sf\huge \worktype}\\[12mm]
+
+    {\sf\Large
+      \@title \par\vspace{5mm}
+      \Titleang
+    }\\[30mm]
+  \end{center}
+
+  {\sf
+  \noindent
+  \begin{tabular}{ll}
+    Autor: & \@author\\
+    Kierunek studiów: & \major\\
+    Opiekun pracy: & \supervisor\\
+  \end{tabular}
+  }
+
+  \vspace{10mm}
+  \begin{center}
+    {\sf \placeyear}
+  \end{center}
+
+\end{titlepage}
+}
+\makeatother

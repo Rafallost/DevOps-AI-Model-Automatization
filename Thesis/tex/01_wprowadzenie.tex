@@ -1,0 +1,43 @@
+\section{Wprowadzenie}
+\label{sec:Wprowadzenie}
+
+\subsection{Geneza}
+
+Pomysł na realizację niniejszego projektu zrodził się podczas wykonywania codziennych obowiązków zawodowych. W trakcie pracy nad jednym z projektów zaobserwowano interesującą tendencję związaną z procesem tworzenia testów modułowych. Znaczna część kodu testowego okazywała się redundantna, a wiele mechanizmów było wielokrotnie powielanych poprzez kopiowanie oraz wprowadzanie drobnych modyfikacji do istniejących fragmentów kodu.
+
+Naturalnym rozwiązaniem tego problemu mogłoby wydawać się wydzielanie powtarzalnych elementów do funkcji pomocniczych lub bibliotek testowych oraz utrzymywanie ich w uporządkowanej i współdzielonej formie. Podejście to jednak wiąże się z istotnymi trudnościami, zarówno natury organizacyjnej, jak i technicznej. W praktyce często prowadzi ono do nadmiernego rozrostu bibliotek pomocniczych, niejednoznacznych interfejsów oraz problemów z ich długoterminowym utrzymaniem.
+
+W szczególności pojawiają się następujące problemy:
+\begin{enumerate}
+  \item Jak określić moment, w którym dana funkcjonalność jest wystarczająco generyczna, aby mogła zostać wydzielona do wspólnej biblioteki?
+  \item Jak zminimalizować ryzyko tworzenia funkcji lokalnie w plikach testowych, które z czasem zaczynają być wykorzystywane przez inne testy, prowadząc do niejawnych zależności pomiędzy teoretycznie niezależnymi modułami?
+  \item Jak zapewnić spójny sposób tworzenia oraz utrzymania takich funkcji w projektach rozwijanych przez dziesiątki, a niekiedy setki programistów, o różnym poziomie doświadczenia i odmiennych nawykach pracy?
+\end{enumerate}
+
+Jednocześnie, jak powszechnie wiadomo, modele sztucznej inteligencji uczą się na podstawie zbiorów danych treningowych, a następnie wykorzystują wyuczone wzorce do rozwiązywania nowych problemów. Obserwacja ta stała się punktem wyjścia do rozważenia możliwości zastosowania modeli AI w obszarze automatycznego generowania wspólnych, powtarzalnych fragmentów kodu testowego na podstawie już istniejących przykładów.
+
+\subsection{Założenia}
+
+W odpowiedzi na postawione pytania badawcze rozważono zastosowanie modelu, który został wstępnie przeuczony na dostępnych danych, a następnie rozwijany wraz z pozyskiwaniem kolejnych zbiorów treningowych.
+
+Na tym etapie pojawia się pierwszy istotny problem założeniowy, a mianowicie konieczność posiadania modelu sztucznej inteligencji. Dla uproszczenia przyjęto, że model SI dostarczany jest przez zewnętrzną firmę, natomiast zakres pracy obejmuje jego wykorzystanie, dalsze uczenie oraz wdrażanie. W tym kontekście pojawia się kluczowe pytanie niniejszej pracy: czy bardziej opłacalne jest oddelegowanie jednego pracownika do ręcznego utrzymywania i rozwijania tego oprogramowania, czy też lepszym rozwiązaniem jest automatyzacja tego procesu z wykorzystaniem narzędzi DevOps oraz pipeline’ów CI/CD?
+
+W podejściu manualnym proces ponownego uczenia i wdrażania modelu realizowany jest przy znaczącym udziale człowieka. Obejmuje on ręczne przygotowanie danych, uruchamianie treningu, walidację wyników oraz publikację nowej wersji modelu. Taki sposób pracy, mimo swojej prostoty, wiąże się z ryzykiem błędów ludzkich, trudnościami w zachowaniu powtarzalności eksperymentów oraz ograniczoną skalowalnością procesu.
+
+Alternatywą dla tego podejścia jest zastosowanie zautomatyzowanego pipeline’u CI/CD, w którym kolejne etapy cyklu życia modelu realizowane są w sposób powtarzalny i kontrolowany, z wykorzystaniem narzędzi znanych z obszaru DevOps. Automatyzacja umożliwia jednoznaczne powiązanie wersji modelu z wersją kodu źródłowego oraz danych treningowych, a także wprowadzenie obiektywnych kryteriów jakościowych decydujących o wdrożeniu nowej wersji modelu.
+
+Wobec powyższych obserwacji zasadnym staje się przeanalizowanie opłacalności oraz efektywności automatyzacji procesu CI/CD w kontekście zarządzania cyklem życia modeli sztucznej inteligencji.
+
+\subsubsection{Zakres projektu}
+
+W ramach niniejszej pracy opracowano kompletny, w pełni zautomatyzowany system CI/CD dla modeli sztucznej inteligencji, oparty o rzeczywisty przypadek użycia: segmentację semantyczną obrazów wodomierzy z wykorzystaniem architektury U-Net. Wybór tego problemu jest celowy, ponieważ model segmentacji obrazów charakteryzuje się:
+
+\begin{itemize}
+  \item wyraźnie zdefiniowanymi metrykami jakości (współczynnik Dice, IoU),
+  \item umiarkowanymi wymaganiami obliczeniowymi, umożliwiającymi trening w ramach dostępnego budżetu,
+  \item dostępnością wstępnie wytrenowanego modelu bazowego, służącego jako punkt odniesienia dla bramki jakości,
+\end{itemize}
+
+Całość projektu została zaprojektowana w taki sposób, aby obejmować wszystkie kluczowe elementy wymagane do realizacji w pełni zautomatyzowanego procesu CI/CD dla modeli sztucznej inteligencji. Opracowany system uwzględnia konteneryzację komponentów z wykorzystaniem Docker, orkiestrację wdrożeń przy użyciu Kubernetes, a także izolację poszczególnych wersji modeli za pomocą namespace’ów. Proces obejmuje automatyczne wykrywanie zmian w kodzie źródłowym oraz danych treningowych, wersjonowanie modeli i danych (MLflow, DVC), a także kontrolę jakości modeli na podstawie zdefiniowanych metryk.
+
+Integralną częścią rozwiązania jest środowisko chmurowe, w którym realizowane są procesy uczenia, testowania, wdrażania modeli SI oraz możliwości predykcji przez użytkownika we wdrożonym modelu. W ramach projektu wdrożono mechanizmy monitoringu infrastruktury oraz aplikacji (Prometheus, Grafana), umożliwiające analizę zużycia zasobów oraz stabilności działania systemu. Cały pipeline CI/CD został zaprojektowany w sposób powtarzalny i możliwy do odtworzenia, co pozwala na bezpośrednie porównanie z podejściem manualnym oraz ocenę wpływu automatyzacji na czas wdrożenia, niezawodność i koszty operacyjne.

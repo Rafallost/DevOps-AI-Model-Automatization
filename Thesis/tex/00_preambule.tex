@@ -1,0 +1,160 @@
+% --- Kodowanie / języki (w PDFLaTeX) ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english,polish]{babel} % polski jako drugi -> zwykle i tak wybierasz \selectlanguage
+% \usepackage{polski} % ZAZWYCZAJ zbędne przy babel+polish; zostaw tylko jeśli masz konkretne powody
+
+% --- Marginesy ---
+\usepackage[margin=2.5cm]{geometry} % prościej niż hmargin+height
+
+% --- Fonty ---
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault} % jeśli chcesz cały dokument sans-serif
+% Jeśli NIE chcesz całego dokumentu sans-serif, usuń linię wyżej i używaj \textsf{} lokalnie.
+
+% --- Matematyka ---
+\usepackage{amsmath,amssymb,amsfonts}
+
+% --- Grafika / rysunki ---
+\usepackage{graphicx}
+\usepackage{epstopdf} % tylko jeśli faktycznie używasz EPS
+\usepackage{tikz}
+\usepackage{url} % for \url in bibliography
+\usetikzlibrary{positioning,arrows.meta}
+
+% -------------------------------------------------
+% Rysunki i podpisy
+% -------------------------------------------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+
+\captionsetup{
+  font=small,
+  labelfont=bf,
+  labelsep=space,
+  figurename=Rys.
+}
+
+% --- Tabele / układ ---
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{float}
+
+% --- Kolory / linki ---
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% --- Bibliografia ---
+\usepackage[numbers]{natbib}
+
+% --- Listy ---
+\usepackage{enumitem}
+\setlist{nosep}
+\raggedbottom
+
+% --- Podpisy i subfigury ---
+\usepackage{caption}
+\usepackage{subcaption}
+
+% --- Kod źródłowy ---
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
+  frame=single,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  keywordstyle=\color{blue},
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!70!black},
+  showstringspaces=false,
+  literate={ą}{{\k{a}}}1 {ć}{{\'c}}1 {ę}{{\k{e}}}1 {ł}{{\l{}}}1 {ń}{{\'n}}1 {ó}{{\'o}}1 {ś}{{\'s}}1 {ź}{{\'z}}1 {ż}{{\.z}}1
+           {Ą}{{\k{A}}}1 {Ć}{{\'C}}1 {Ę}{{\k{E}}}1 {Ł}{{\L{}}}1 {Ń}{{\'N}}1 {Ó}{{\'O}}1 {Ś}{{\'S}}1 {Ź}{{\'Z}}1 {Ż}{{\.Z}}1
+}
+
+% --- Nagłówki stron ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Opracowanie}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Interlinia ---
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Spis treści (opcjonalnie, jeśli faktycznie modyfikujesz TOC) ---
+\usepackage{tocloft}
+
+% --- Unicode znaki (żeby LaTeX nie krzyczał) ---
+\usepackage{newunicodechar}
+\newunicodechar{₂}{$_2$}
+\newunicodechar{₃}{$_3$}
+\newunicodechar{α}{$\alpha$}
+\newunicodechar{β}{$\beta$}
+\newunicodechar{γ}{$\gamma$}
+\newunicodechar{σ}{$\sigma$}
+\newunicodechar{ε}{$\varepsilon$}
+\newunicodechar{φ}{$\varphi$}
+\newunicodechar{→}{$\rightarrow$}
+\newunicodechar{×}{$\times$}
+
+% =====================================================
+%  WYGLĄD NAGŁÓWKÓW + NUMERACJA DO POZIOMU 2
+% =====================================================
+\usepackage{titlesec}
+
+% Numeruj: section (1), subsection (2), subsubsection (3). Paragraph (4) bez numeru.
+\setcounter{secnumdepth}{3}
+% W spisie treści pokaż do subsubsection (opcjonalnie):
+\setcounter{tocdepth}{3}
+
+% SECTION Poziom 0: wyraźny (większy, półgruby)
+\titleformat{\section}
+  {\normalfont\Large\bfseries\sffamily}
+  {\thesection}{1em}{}
+
+% SUBSECTION Poziom 1: trochę mniejszy, nadal wyraźny
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\sffamily}
+  {\thesubsection}{1em}{}
+
+% SUBSUBSECTION Poziom 2: bez pogrubienia (żeby nie było "wszędzie grubo"), ale np. italik + trochę odstępu
+\titleformat{\subsubsection}
+  {\normalfont\bfseries\normalsize\sffamily}
+  {\thesubsubsection}{1em}{}
+
+% PARAGRAPH Poziom 3: jako osobna linia (block), BEZ numeru i bez przesadnego bolda
+\titleformat{\paragraph}[block]
+  {\normalfont\bfseries\normalsize\sffamily}
+  {}{0em}{}
+
+% Odstępy: różnicują poziomy bardziej niż sama czcionka
+\titlespacing*{\section}{0pt}{2.5ex plus 1ex minus .2ex}{1.2ex}
+\titlespacing*{\subsection}{0pt}{2.0ex plus 0.8ex minus .2ex}{0.9ex}
+\titlespacing*{\subsubsection}{0pt}{1.5ex plus 0.6ex minus .2ex}{0.6ex}
+\titlespacing*{\paragraph}{0pt}{1.0ex plus 0.4ex minus .2ex}{0.4ex}
+
+% =====================================================
+%  Tytułowa
+% =====================================================
+\input{tex/00_title_page}
+
+%% ================================================== %%
+%%                 STRUKTURA RODZIAŁÓW                %%
+%% ================================================== %%
+%%                                                    %%
+%%   \section{Nagłówek sekcji}                        %%
+%%   \label{sec:Nagłówek sekcji}                      %%
+%%                                                    %%
+%%   \subsection{Poziom 1}                            %%
+%%                                                    %%
+%%   \subsubsection{Poziom 2}                         %%
+%%                                                    %%
+%%   \paragraph{Poziom 3}\mbox{}\\                    %%
+%% ================================================== %%
