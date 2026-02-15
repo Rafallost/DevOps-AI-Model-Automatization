@@ -23,9 +23,13 @@ trap "rm -rf ${TEMP_DIR}" EXIT
 
 # Parse arguments
 DRY_RUN=true
-if [[ "${1:-}" == "--confirm" ]]; then
-    DRY_RUN=false
-fi
+AUTO_MODE=false
+for arg in "$@"; do
+    case $arg in
+        --confirm) DRY_RUN=false ;;
+        --auto) AUTO_MODE=true; DRY_RUN=false ;;
+    esac
+done
 
 # Color output
 RED='\033[0;31m'
@@ -46,9 +50,16 @@ if [[ ! -f "${IMAGES_DVC}" ]] || [[ ! -f "${MASKS_DVC}" ]]; then
     exit 1
 fi
 
-# Extract .dir manifest hashes from .dvc files
-IMAGES_HASH=$(grep "md5:" "${IMAGES_DVC}" | awk '{print $2}')
-MASKS_HASH=$(grep "md5:" "${MASKS_DVC}" | awk '{print $2}')
+# Extract .dir manifest hashes from .dvc files (match only lines with .dir suffix)
+IMAGES_HASH=$(grep "md5:.*\.dir" "${IMAGES_DVC}" | awk '{print $NF}')
+MASKS_HASH=$(grep "md5:.*\.dir" "${MASKS_DVC}" | awk '{print $NF}')
+
+if [[ -z "${IMAGES_HASH}" ]] || [[ -z "${MASKS_HASH}" ]]; then
+    echo -e "${RED}ERROR: Could not extract md5 hash from .dvc files${NC}"
+    echo "  images.dvc content:"
+    cat "${IMAGES_DVC}"
+    exit 1
+fi
 
 echo "  images.dvc → ${IMAGES_HASH}"
 echo "  masks.dvc  → ${MASKS_HASH}"
@@ -70,17 +81,24 @@ echo ""
 echo "[3/5] Parsing referenced JPG files..."
 ACTIVE_FILES="${TEMP_DIR}/active_files.txt"
 
-# Add .dir manifests to whitelist
-echo "${IMAGES_HASH:0:2}/${IMAGES_HASH:2}" > "${ACTIVE_FILES}"
-echo "${MASKS_HASH:0:2}/${MASKS_HASH:2}" >> "${ACTIVE_FILES}"
+# Add .dir manifests to whitelist (strip \r for Windows compatibility)
+printf '%s/%s\n' "${IMAGES_HASH:0:2}" "${IMAGES_HASH:2}" | tr -d '\r' > "${ACTIVE_FILES}"
+printf '%s/%s\n' "${MASKS_HASH:0:2}" "${MASKS_HASH:2}" | tr -d '\r' >> "${ACTIVE_FILES}"
 
 # Parse .dir JSON and extract md5 hashes (format: [{...,"md5":"hash",...},...]
-# Use Python for robust JSON parsing
-python3 <<EOF >> "${ACTIVE_FILES}"
+# Use Python for robust JSON parsing (python3 on Linux/Mac, python on Windows)
+PYTHON_CMD=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "")
+if [[ -z "${PYTHON_CMD}" ]]; then
+    echo -e "${RED}ERROR: Python not found. Install Python 3.${NC}"
+    exit 1
+fi
+IMAGES_DIR_WIN=$(cygpath -w "${IMAGES_DIR}" 2>/dev/null || echo "${IMAGES_DIR}")
+MASKS_DIR_WIN=$(cygpath -w "${MASKS_DIR}" 2>/dev/null || echo "${MASKS_DIR}")
+IMAGES_DIR_ENV="${IMAGES_DIR_WIN}" MASKS_DIR_ENV="${MASKS_DIR_WIN}" ${PYTHON_CMD} <<'EOF' | tr -d '\r' >> "${ACTIVE_FILES}"
 import json
-import sys
+import os
 
-for dir_file in ["${IMAGES_DIR}", "${MASKS_DIR}"]:
+for dir_file in [os.environ['IMAGES_DIR_ENV'], os.environ['MASKS_DIR_ENV']]:
     with open(dir_file, 'r') as f:
         entries = json.load(f)
     for entry in entries:
@@ -96,7 +114,10 @@ echo ""
 # Step 4: List all S3 files and identify orphans
 echo "[4/5] Scanning S3 bucket for orphaned files..."
 S3_ALL_FILES="${TEMP_DIR}/s3_all_files.txt"
-aws s3 ls "${DVC_BUCKET}/${DVC_PREFIX}/" --recursive | awk '{print $4}' | sed "s|^${DVC_PREFIX}/||" > "${S3_ALL_FILES}"
+# aws s3 ls returns paths relative to bucket root (e.g. dvc/files/md5/XX/YYY)
+# We strip the bucket base path prefix to get just XX/YYY
+BUCKET_NAME=$(echo "${DVC_BUCKET}" | sed 's|s3://[^/]*/||')  # e.g. "dvc"
+aws s3 ls "${DVC_BUCKET}/${DVC_PREFIX}/" --recursive | awk '{print $4}' | sed "s|^${BUCKET_NAME}/${DVC_PREFIX}/||" | tr -d '\r' > "${S3_ALL_FILES}"
 
 S3_TOTAL=$(wc -l < "${S3_ALL_FILES}")
 echo "  Total S3 files: ${S3_TOTAL}"
@@ -141,14 +162,18 @@ if [[ "${DRY_RUN}" == true ]]; then
     exit 0
 fi
 
-# Confirmation prompt
+# Confirmation prompt (skipped in --auto mode)
 echo -e "${YELLOW}⚠️  WARNING: This will permanently delete ${ORPHAN_COUNT} files from S3${NC}"
-echo "Type 'yes' to confirm deletion:"
-read -r CONFIRM
+if [ "${AUTO_MODE}" = "false" ]; then
+    echo "Type 'yes' to confirm deletion:"
+    read -r CONFIRM
 
-if [[ "${CONFIRM}" != "yes" ]]; then
-    echo "Deletion cancelled."
-    exit 0
+    if [[ "${CONFIRM}" != "yes" ]]; then
+        echo "Deletion cancelled."
+        exit 0
+    fi
+else
+    echo "Auto mode enabled — skipping confirmation"
 fi
 
 # Execute deletion
@@ -156,7 +181,11 @@ echo ""
 echo "[5/5] Deleting orphaned files..."
 DELETED=0
 while read -r file; do
-    aws s3 rm "${DVC_BUCKET}/${DVC_PREFIX}/${file}" --quiet && ((DELETED++)) || echo "  Failed: ${file}"
+    if aws s3 rm "${DVC_BUCKET}/${DVC_PREFIX}/${file}" --quiet; then
+        DELETED=$((DELETED + 1))
+    else
+        echo "  Failed: ${file}"
+    fi
 done < "${ORPHANS}"
 
 echo ""
