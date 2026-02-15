@@ -17,7 +17,7 @@ service:
   type: NodePort  # Use NodePort instead of LoadBalancer (budget constraint)
   port: 8000
   targetPort: 8000
-  # nodePort: 30080  # Optional: specify node port, otherwise auto-assigned
+  nodePort: 30080  # Fixed port for predictable access
 
 resources:
   # Resource limits appropriate for t3.small (2GB RAM, 2 vCPU)

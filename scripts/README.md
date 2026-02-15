@@ -29,7 +29,7 @@ Parametry: `EC2_IP` (domyślnie hardcoded), `SSH_KEY` (domyślnie `~/.ssh/labsus
 
 ## DVC / S3
 
-**`cleanup-s3-dvc.sh`** — usuwa pliki osierocone z bucketu DVC (nieużywane przez żaden manifest `.dvc`). Domyślnie dry-run. Flaga `--confirm` uruchamia faktyczne usuwanie. Wczytuje aktywne manifesty `images.dvc` i `masks.dvc`, parsuje hashes i porównuje z zawartością S3.
+**`cleanup-s3-dvc.sh`** — usuwa pliki osierocone z bucketu DVC (nieużywane przez żaden manifest `.dvc`). Domyślnie dry-run. Flaga `--confirm` uruchamia faktyczne usuwanie, `--auto` uruchamia bez interaktywnego potwierdzenia (używane przez CI). Wczytuje aktywne manifesty `images.dvc` i `masks.dvc`, parsuje hashes i porównuje z zawartością S3. Przy obecnej architekturze (DVC push tylko po udanym treningu) pliki osierocone nie powinny powstawać w normalnym przepływie — skrypt służy jako narzędzie awaryjne.
 
 ## Walidacja i jakość modelu (używane przez GitHub Actions)
 
