@@ -5,6 +5,7 @@ metadata:
   name: {{ include "ml-model.fullname" . }}
   labels:
     app: {{ include "ml-model.name" . }}
+    prometheus: kube-prometheus
     chart: {{ include "ml-model.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
