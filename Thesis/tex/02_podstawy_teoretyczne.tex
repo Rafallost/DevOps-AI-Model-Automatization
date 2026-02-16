@@ -1,152 +1,88 @@
-\section{Architektura systemu WIP!}
-\label{sec:Architektura_systemu}
+\section{Podstawy teoretyczne}
+\label{sec:Podstawy_teoretyczne}
 
-\subsection{Przegląd architektury}
+\subsection{DevOps}
 
-System został zaprojektowany jako zautomatyzowany pipeline CI/CD dla modeli uczenia maszynowego. Obejmuje cały cykl życia modelu: od dodania danych treningowych, przez walidację danych i trening, aż po wybór najlepszego modelu i wdrożenie.
+DevOps to zbiór praktyk, kultury organizacyjnej i narzędzi, których celem jest skrócenie cyklu życia oprogramowania przy jednoczesnym zapewnieniu wysokiej jakości dostarczanych produktów. Termin pochodzi od połączenia słów \textit{Development} i \textit{Operations}, co odzwierciedla dążenie do przełamania tradycyjnej bariery między zespołami deweloperskimi a operacyjnymi.
 
-Architektura opiera się na trzech głównych obszarach:
+Kluczowym elementem filozofii DevOps jest pętla ciągłego doskonalenia, obejmująca planowanie, kodowanie, budowanie, testowanie, wdrażanie, uruchamianie oraz monitorowanie. Każdy obrót pętli dostarcza informacje zwrotne, które pozwalają szybciej reagować na błędy i wymagania użytkowników. W kontekście niniejszej pracy DevOps stanowi ramy koncepcyjne, w których osadzony jest cały projekt - automatyzacja procesu trenowania i wdrażania modelu SI jest bezpośrednią aplikacją tych zasad \cite{loukides_devops_bookey}.
+
+\subsection{Ciągła Integracja i Ciągłe Dostarczanie (CI/CD)}
+
+Ciągła Integracja (ang. \textit{Continuous Integration}, CI) polega na automatycznym scalaniu i weryfikacji zmian kodu wielokrotnie w ciągu dnia. Każda zmiana uruchamia zdefiniowany zestaw testów, co pozwala wykryć błędy integracyjne natychmiast po ich wprowadzeniu, zamiast odkrywać je dopiero na etapie wydania.
+
+Ciągłe Dostarczanie (ang. \textit{Continuous Delivery}) rozszerza CI o automatyczne przygotowanie artefaktów gotowych do wdrożenia. Ciągłe Wdrażanie (ang. \textit{Continuous Deployment}) idzie krok dalej - każda zmiana spełniająca kryteria jakości jest wdrażana do produkcji.
+
+Typowy pipeline CI/CD składa się z następujących etapów:
+\begin{enumerate}
+  \item weryfikacja kodu (linting, testy jednostkowe),
+  \item budowanie artefaktów (np. obrazu Docker),
+  \item testy integracyjne i akceptacyjne,
+  \item wdrożenie na środowisko docelowe,
+  \item weryfikacja po wdrożeniu (smoke tests).
+\end{enumerate}
+
+W niniejszym projekcie pipeline CI/CD realizowany jest przez GitHub Actions i obejmuje dodatkowe etapy specyficzne dla ML: walidację danych, trening modelu oraz bramkę jakości.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[scale=0.45]{img/02_podstawy_teoretyczne/CI-CD.jpg}
+  \caption{Przykład flow CI/CD \cite{geeksforgeeks_cicd}.}
+\end{figure}
+
+\subsection{MLOps}
+
+MLOps (ang. \textit{Machine Learning Operations}) to dyscyplina stosująca zasady DevOps do specyfiki cyklu życia modeli uczenia maszynowego. W odróżnieniu od klasycznego oprogramowania, gdzie artefaktem jest kod, w ML artefaktem jest model - wynik trenowania na konkretnym zbiorze danych. To wprowadza kilka dodatkowych wyzwań:
+
 \begin{itemize}
-  \item kontrola wersji kodu i danych,
-  \item uruchamianie zadań i wdrożeń w kontenerach,
-  \item rejestrowanie eksperymentów oraz wersji modeli.
+  \item dane treningowe zmieniają się niezależnie od kodu,
+  \item wyniki trenowania są niedeterministyczne,
+  \item jakość modelu musi być mierzona obiektywnie przed każdym wdrożeniem,
+  \item modele degradują się w czasie (tzw. \textit{data drift}).
 \end{itemize}
 
-Punktem centralnym jest repozytorium Git. To w nim przechowywany jest kod, konfiguracja oraz metadane danych. Każdy push lub merge może uruchomić automatyczne procesy w GitHub Actions. Dzięki temu użytkownik nie musi ręcznie wykonywać większości kroków operacyjnych.
+Cykl życia modelu ML obejmuje zbieranie danych, przygotowanie danych, eksperymentowanie, trening, ewaluację, wdrożenie i monitoring. MLOps automatyzuje ten cykl, integrując go z narzędziami kontroli wersji, CI/CD oraz rejestrami modeli. W niniejszym projekcie MLOps realizowany jest przez połączenie GitHub Actions (automatyzacja), DVC (wersjonowanie danych) oraz MLflow (śledzenie eksperymentów i rejestr modeli).
 
-Część obliczeniowa działa w chmurze AWS. Zasoby są uruchamiane tylko wtedy, gdy są potrzebne, na przykład na czas treningu lub pobrania modelu. Po zakończeniu pracy instancja jest zatrzymywana, aby ograniczyć koszty. Szczegółowe uzasadnienie takich decyzji znajduje się we wprowadzeniu w sekcji \ref{sec:Wprowadzenie}.
+\subsection{Konteneryzacja - Docker}
 
-W projekcie wykorzystano model U-Net do segmentacji semantycznej obrazów wodomierzy. To zadanie pozwala łatwo oceniać jakość modelu, ponieważ istnieją jasne metryki takie jak Dice oraz IoU. Metryki te są używane w bramce jakości, która decyduje, czy nowa wersja modelu może zostać uznana za lepszą od obecnej.
+Docker to platforma do tworzenia, dystrybucji i uruchamiania aplikacji w kontenerach \cite{merkel2014docker}. Kontener to izolowane środowisko uruchomieniowe zawierające aplikację wraz ze wszystkimi jej zależnościami: bibliotekami, interpreterem, zmiennymi środowiskowymi. Dzięki temu aplikacja działa identycznie na maszynie dewelopera, serwerze testowym i produkcji, eliminując problem \textit{,,u mnie działa''}.
 
-\subsection{Komponenty systemu}
-
-\subsubsection{Warstwa kontroli wersji}
-
-Git odpowiada za wersjonowanie kodu, konfiguracji oraz metadanych związanych z danymi treningowymi. Repozytorium można podzielić na trzy logiczne części.
-
-\paragraph{Kod modelu i skrypty treningowe}\mbox{}\\
-Ta część zawiera implementację modelu U-Net w PyTorch oraz skrypty odpowiedzialne za przygotowanie danych, trening i walidację. Ponieważ kod jest wersjonowany, można odtworzyć, w jakich warunkach trenowano konkretną wersję modelu.
-
-\paragraph{Dane treningowe}\mbox{}\\
-Domyślną metodą zarządzania danymi treningowymi w systemie jest DVC. Repozytorium Git przechowuje wtedy jedynie metadane i pliki śledzące (na przykład \texttt{.dvc} oraz \texttt{dvc.lock}), natomiast właściwe obrazy i maski znajdują się w Amazon S3. Takie podejście skaluje się znacznie lepiej niż trzymanie dużych plików w Git i pozwala na wersjonowanie danych w sposób spójny z wersjonowaniem kodu.
-
-W wariancie proof of concept dopuszczono również możliwość przechowywania małych zbiorów danych bezpośrednio w repozytorium, aby uprościć szybkie testy. Należy jednak zaznaczyć, że użycie DVC wiąże się z dodatkowym krokiem \texttt{dvc pull}, który w praktyce może zauważalnie wydłużyć czas działania pipeline, szczególnie przy większych zbiorach danych.
-
-
-\paragraph{Infrastruktura jako kod}\mbox{}\\
-Definicja infrastruktury jest utrzymywana w kodzie, głównie jako moduły Terraform oraz konfiguracje Helm. Dzięki temu środowisko można odtworzyć w sposób powtarzalny, a zmiany infrastruktury są widoczne w historii repozytorium.
-
-\subsubsection{Warstwa uruchamiania procesów}
-
-\paragraph{GitHub Actions}\mbox{}\\
-GitHub Actions pełni rolę głównego mechanizmu uruchamiania procesów CI/CD. W projekcie wykorzystano kilka workflow, z których najważniejsze realizują następujące zadania:
+Kluczowe pojęcia:
 \begin{itemize}
-  \item walidacja danych treningowych dla pull requestów,
-  \item uruchomienie treningu modelu i zebranie wyników,
-  \item uruchamianie i zatrzymywanie instancji EC2,
-  \item testy jakości kodu i testy jednostkowe,
-  \item obsługa procesu dodania danych i utworzenia pull requesta.
+  \item \textbf{Obraz (image)} - niezmienialny szablon opisujący środowisko, plik \texttt{Dockerfile},
+  \item \textbf{Kontener} - działająca instancja obrazu; izolowana od systemu hosta i innych kontenerów,
+  \item \textbf{Rejestr (registry)} - repozytorium obrazów (np. Docker Hub, Amazon ECR).
 \end{itemize}
 
-\paragraph{Instancja EC2 i k3s}\mbox{}\\
-Zamiast zarządzanego klastra Kubernetes zastosowano k3s uruchomiony na pojedynczej instancji EC2. To podejście jest wystarczające dla projektu proof of concept i pozwala znacząco ograniczyć koszty. Na instancji działa klaster k3s oraz usługi potrzebne do treningu i wdrożeń.
+W projekcie Docker służy do pakowania API modelu oraz do zapewnienia powtarzalności środowiska treningowego. Obraz z modelem jest budowany automatycznie w pipeline po zatwierdzeniu nowej wersji modelu.
 
-\paragraph{MLflow}\mbox{}\\
-MLflow odpowiada za dwie rzeczy. Po pierwsze zapisuje przebieg eksperymentów, czyli metryki, parametry oraz artefakty treningu. Po drugie przechowuje wersje modeli i ich status, na przykład Production lub Archived. W tym projekcie metadane mogą być przechowywane w prostej bazie lokalnej, a artefakty trafiają do S3.
+\subsection{Kubernetes i k3s}
 
-\subsubsection{Warstwa przechowywania danych}
+Kubernetes (K8s) to system do orkiestracji kontenerów - automatyzuje ich wdrażanie, skalowanie i zarządzanie \cite{burns2016borg}. Zamiast uruchamiać kontenery ręcznie na konkretnych maszynach, Kubernetes przyjmuje deklaratywny opis pożądanego stanu (ile replik, jakie zasoby, jak reagować na awarie) i utrzymuje ten stan niezależnie od zdarzeń infrastrukturalnych.
 
-\paragraph{Amazon S3}\mbox{}\\
-S3 jest używane jako trwałe miejsce przechowywania. W systemie trafiają tam głównie artefakty z MLflow, takie jak wagi modeli i logi. Opcjonalnie S3 może też być wykorzystywane do przechowywania danych treningowych, jeśli używany jest DVC.
+k3s to uproszczona dystrybucja Kubernetes stworzona przez Rancher Labs. Zmniejsza wymagania sprzętowe (minimalna instalacja działa na instancji z 2 GB RAM) i upraszcza instalację do pojedynczego polecenia. Jest przeznaczona dla środowisk brzegowych, IoT oraz małych klastrów. W niniejszym projekcie k3s zainstalowany na pojedynczej instancji EC2 zastępuje zarządzany klaster EKS, co pozwala ograniczyć koszty do minimum.
 
-\paragraph{Amazon ECR}\mbox{}\\
-ECR służy jako rejestr obrazów Docker. Po zaakceptowaniu modelu przez bramkę jakości obraz kontenera jest budowany i wysyłany do ECR, a następnie wdrażany na klaster k3s.
+\subsection{Wersjonowanie modeli - MLflow}
 
-Warto zaznaczyć, że jeśli dane są przechowywane w DVC, etap przygotowania środowiska obejmuje dodatkowe pobranie danych z S3, co jest jednym z głównych źródeł wydłużenia czasu całego workflow treningowego.
+MLflow to platforma open-source do zarządzania cyklem życia modeli ML. Składa się z czterech głównych komponentów:
 
+\begin{itemize}
+  \item \textbf{Tracking} - rejestrowanie parametrów, metryk i artefaktów każdego uruchomienia eksperymentu,
+  \item \textbf{Projects} - standaryzacja i reprodukowalność kodu ML,
+  \item \textbf{Models} - zunifikowany format pakowania modeli,
+  \item \textbf{Model Registry} - centralny rejestr wersji modeli z etapami cyklu życia (Staging, Production, Archived).
+\end{itemize}
 
-\subsubsection{Warstwa monitorowania}
+Model Registry jest kluczowym elementem w kontekście bramki jakości. Po każdym treningu nowa wersja modelu jest rejestrowana w MLflow. Bramka jakości pobiera metryki modelu aktualnie w etapie Production i porównuje z nowym wynikiem. Tylko model z lepszymi metrykami zostaje awansowany do Production \cite{mlflow_model_registry}.
 
-System zawiera również komponenty monitoringu oparte na Prometheus oraz Grafana.
+\subsection{Wersjonowanie danych - DVC}
 
-\paragraph{Prometheus}\mbox{}\\
-Prometheus pobiera metryki z endpointu \texttt{/metrics} udostępnionego przez API modelu. Przykładowe metryki to liczba predykcji, czasy odpowiedzi oraz liczba błędów.
+DVC (ang. \textit{Data Version Control}) to narzędzie umożliwiające wersjonowanie dużych plików binarnych (obrazów, wag modeli, zbiorów danych) w sposób spójny z Git. Zamiast przechowywać dane w repozytorium Git (co jest niepraktyczne przy dużych plikach), DVC przechowuje jedynie lekkie pliki metadanych (\texttt{.dvc}), a rzeczywiste dane trafiają do zewnętrznego magazynu - w tym projekcie do Amazon S3 \cite{dvc_docs}.
 
-\paragraph{Grafana}\mbox{}\\
-Grafana prezentuje metryki w postaci dashboardów. Dzięki temu można obserwować wydajność modelu i zachowanie usługi w czasie działania.
+Zasada działania jest analogiczna do Git: każda wersja danych ma swój hash, można cofać się do poprzednich wersji poleceniem \texttt{dvc checkout}, a polecenie \texttt{dvc pull} pobiera dane odpowiadające bieżącemu stanowi repozytorium. Dzięki temu możliwe jest odtworzenie dokładnego eksperymentu: tej samej wersji kodu, danych i konfiguracji.
 
-\subsection{Przepływ danych i sterowania}
+\subsection{Monitoring - Prometheus i Grafana}
 
-\subsubsection{Dodawanie nowych danych treningowych}
+Prometheus to system monitorowania i alertowania oparty na modelu \textit{pull} \cite{prometheus_docs}. Regularnie pobiera (scrape) metryki z endpointów HTTP udostępnianych przez monitorowane usługi i przechowuje je w wbudowanej bazie szeregów czasowych. Metryki opisywane są etykietami (labels), co pozwala na elastyczne filtrowanie i agregację.
 
-Proces zaczyna się w momencie, gdy użytkownik dodaje nowe obrazy i maski, a następnie wykonuje push do repozytorium. Dalej system działa automatycznie. W przypadku danych treningowych system zakłada domyślnie użycie DVC, co oznacza, że w ramach pipeline konieczne jest pobranie danych z S3, a to zwiększa czas wykonania w porównaniu do wariantu, w którym dane są dostępne lokalnie w repozytorium.
-
-
-\begin{enumerate}
-  \item Hook pre-push wykrywa zmiany w katalogu z danymi treningowymi.
-  \item Tworzona jest osobna gałąź dla danych i generowany jest pull request.
-  \item Uruchamia się walidacja danych. Sprawdzane jest:
-  \begin{itemize}
-    \item czy każdy obraz ma odpowiadającą mu maskę,
-    \item czy pliki mają wymaganą rozdzielczość,
-    \item czy maski są binarne.
-  \end{itemize}
-  \item Wynik walidacji jest publikowany w pull requeście jako komentarz. W przypadku błędów proces jest zatrzymywany.
-\end{enumerate}
-
-\subsubsection{Trening i bramka jakości}
-
-Po zaakceptowaniu danych użytkownik może uruchomić trening. Proces obejmuje następujące kroki.
-
-\begin{enumerate}
-  \item Uruchomienie instancji EC2 i oczekiwanie na gotowość usług na k3s.
-  \item Wykonanie kilku niezależnych prób treningu z różnymi ziarnami losowymi.
-  \item Zapis metryk i artefaktów do MLflow.
-  \item Porównanie najlepszej próby z modelem bazowym w Production.
-  \item Jeśli wynik jest lepszy lub mieści się w ustalonej tolerancji, model jest promowany do Production, a poprzedni model trafia do Archived.
-  \item Niezależnie od wyniku instancja EC2 jest zatrzymywana.
-\end{enumerate}
-
-\subsubsection{Predykcja lokalna}
-
-Użytkownik może wykonywać predykcje lokalnie bez ciągłego uruchamiania infrastruktury.
-
-\begin{enumerate}
-  \item Przy pierwszym uruchomieniu pobierany jest aktualny model Production za pomocą \texttt{sync\_model\_aws.py}.
-  \item Model jest zapisywany lokalnie w katalogu ignorowanym przez Git.
-  \item Predykcje wykonywane są skryptem \texttt{predicts.py} na obrazach umieszczonych w odpowiednim folderze.
-  \item W dowolnym momencie użytkownik może wymusić aktualizację modelu i pobrać najnowszą wersję.
-\end{enumerate}
-
-\subsection{Diagram architektury}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{img/02_architektura_systemu/architecture-overview.png}
-\caption{Diagram kontekstowy C4 przedstawiający główne komponenty systemu oraz ich interakcje}
-\label{fig:architecture-overview}
-\end{figure}
-
-Rysunek \ref{fig:architecture-overview} przedstawia kontekst systemu w notacji C4. Użytkownik pracuje z repozytorium Git, a automatyzacja realizowana jest przez GitHub Actions. Workflow zarządzają zasobami AWS, uruchamiają instancję EC2 i wykonują zadania treningowe oraz wdrożeniowe. Na EC2 działa klaster k3s, w którym uruchomione są MLflow, API modelu oraz narzędzia monitoringu. Artefakty modelu są przechowywane w S3, a obrazy kontenerów w ECR.
-
-\subsection{System monitorowania}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{img/02_architektura_systemu/monitoring-stack.png}
-\caption{Architektura stosu monitorowania opartego na Prometheus i Grafana}
-\label{fig:monitoring-stack}
-\end{figure}
-
-Rysunek \ref{fig:monitoring-stack} przedstawia monitoring aplikacji. API modelu udostępnia metryki na endpoincie \texttt{/metrics}. Prometheus cyklicznie pobiera te dane, przechowuje je w bazie szeregów czasowych i udostępnia do zapytań. Grafana wizualizuje metryki na dashboardach, które pozwalają śledzić liczbę zapytań, opóźnienia oraz błędy.
-
-\subsection{Przepływ danych w systemie}
-
-\begin{figure}[H]
-\centering
-\includegraphics[scale=0.09]{img/02_architektura_systemu/data-flow.png}
-\caption{Diagram przepływu danych treningowych przez system}
-\label{fig:data-flow}
-\end{figure}
-
-Rysunek \ref{fig:data-flow} pokazuje drogę danych od lokalnego repozytorium do artefaktów produkcyjnych. Dane są commitowane do Git lub wersjonowane przez DVC, a następnie pobierane przez runner GitHub Actions. Skrypty przygotowują podział danych, trening generuje wagi modelu, a wynik jest rejestrowany w MLflow. Model Production może zostać pobrany lokalnie i użyty do predykcji.
+Grafana to platforma wizualizacji danych, która integruje się z wieloma źródłami, w tym z Prometheus. Pozwala tworzyć interaktywne dashboardy z wykresami, wskaźnikami i alertami. W projekcie Grafana prezentuje metryki działającego API modelu: liczbę predykcji, czasy odpowiedzi, zużycie zasobów i liczbę błędów. Monitoring działa jako opcjonalny stos uruchamiany na tym samym klastrze k3s co API modelu \cite{grafana_intro}.

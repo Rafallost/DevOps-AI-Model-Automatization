@@ -1,0 +1,123 @@
+\section{Implementacja pipeline CI/CD WIP}
+\label{sec:Implementacja_pipeline}
+
+Rozdział opisuje implementację zautomatyzowanego pipeline CI/CD dla modeli uczenia maszynowego. Prezentowane rozwiązanie realizuje przepływ: dodanie danych treningowych przez użytkownika wyzwala sekwencję kroków --- walidację, trening, ocenę jakości i wdrożenie --- bez konieczności ręcznej interwencji.
+
+\subsection{Hook pre-push}
+
+Pierwszym elementem pipeline jest hook Git \texttt{pre-push} \cite{chacon2014pro_git}, instalowany lokalnie na maszynie użytkownika przez skrypt \texttt{devops/scripts/install-git-hooks.sh}. Hook uruchamia się automatycznie przed każdym \texttt{git push} i sprawdza, czy w zestawie zmian znajdują się pliki w katalogach \texttt{WMS/data/training/images/} lub \texttt{WMS/data/training/masks/}.
+
+Jeśli zmiany dotyczą danych treningowych, hook:
+\begin{enumerate}
+  \item tworzy nową gałąź o nazwie \texttt{data/TIMESTAMP} (np. \texttt{data/20260215-143022}),
+  \item commituje do niej wyłącznie nowe pliki z katalogów danych,
+  \item przekierowuje push na tę gałąź zamiast na \texttt{main}.
+\end{enumerate}
+
+Całość wykonuje się w mniej niż 10 sekund, ponieważ hook nie wymaga połączenia z AWS ani lokalnych poświadczeń chmurowych. Merge danych z historycznym zbiorem w S3 odbywa się po stronie GitHub Actions.
+
+% [UZUPEŁNIĆ: screenshot działającego hooka w terminalu]
+
+\subsection{Walidacja danych}
+
+Po wypchnięciu gałęzi danych uruchamia się pierwszy job workflow \texttt{training-data-pipeline.yaml} \cite{github_actions_docs}: \texttt{merge-and-validate}. Składa się on z dwóch faz.
+
+\paragraph{Faza scalania}\mbox{}\\
+Job pobiera istniejące dane z Amazon S3 (za pomocą poświadczeń przechowywanych w sekretach GitHub), scala je z nowo dostarczonymi plikami i aktualizuje manifesty DVC. Scalanie jest idempotentne --- pliki o identycznej nazwie i sumie kontrolnej nie są duplikowane.
+
+\paragraph{Faza walidacji}\mbox{}\\
+Skrypt \texttt{validate\_data.py} weryfikuje scalony zbiór danych pod kątem czterech kryteriów:
+\begin{itemize}
+  \item \textbf{kompletność par} --- dla każdego obrazu w katalogu \texttt{images/} musi istnieć maska o tej samej nazwie w \texttt{masks/} (porównanie po \textit{stem} nazwy pliku),
+  \item \textbf{rozdzielczość} --- każdy plik obrazu i maski musi mieć rozdzielczość dokładnie $512 \times 512$ px,
+  \item \textbf{binarność masek} --- maski mogą zawierać wyłącznie wartości $0$ i $255$ (brak półprzezroczystości),
+  \item \textbf{format pliku} --- akceptowane są formaty \texttt{.jpg} oraz \texttt{.png}.
+\end{itemize}
+
+Wynik walidacji jest publikowany jako komentarz w pull requeście. W przypadku błędów komentarz zawiera listę plików niezgodnych z wymaganiami, a dalsze jobe są pomijane (warunkowanie przez \texttt{needs} i \texttt{if: needs.merge-and-validate.outputs.valid == 'true'}).
+
+\begin{verbatim}
+# Fragment skryptu walidacji
+for img_stem in image_stems:
+    if img_stem not in mask_stems:
+        errors.append(f"Brak maski dla: {img_stem}")
+\end{verbatim}
+
+\subsection{Pipeline treningowy}
+
+Główny workflow \texttt{training-data-pipeline.yaml} składa się z sześciu jobów wykonywanych sekwencyjnie z wyjątkiem \texttt{stop-infra}, który uruchamia się zawsze niezależnie od wyników poprzednich kroków.
+
+\begin{figure}[H]
+\centering
+% [UZUPEŁNIĆ: diagram sekwencji 6 jobów workflow]
+\caption{Sekwencja jobów w workflow \texttt{training-data-pipeline.yaml}}
+\label{fig:workflow-jobs}
+\end{figure}
+
+\paragraph{Job 1: merge-and-validate}\mbox{}\\
+Opisany w poprzedniej sekcji. Pobiera dane z S3, scala, waliduje i aktualizuje DVC.
+
+\paragraph{Job 2: start-infra}\mbox{}\\
+Uruchamia instancję EC2 za pomocą AWS CLI (\texttt{aws ec2 start-instances}). Następnie czeka na pojawienie się GitHub Actions runnera na tej instancji, odpytując API GitHub co 30 sekund przez maksymalnie 10 minut.
+
+\paragraph{Job 3: train}\mbox{}\\
+Wykonuje się na self-hosted runnerze zainstalowanym na instancji EC2. Pobiera dane z S3, uruchamia skrypt \texttt{train.py}, który trenuje model U-Net przez zdefiniowaną liczbę epok i loguje metryki do MLflow. Po zakończeniu treningu skrypt \texttt{quality\_gate.py} porównuje wyniki z modelem Production.
+
+\paragraph{Job 4: stop-infra}\mbox{}\\
+Zatrzymuje instancję EC2 niezależnie od wyniku treningu (\texttt{if: always()}). Zapobiega to przypadkowemu pozostawieniu instancji uruchomionej i naliczaniu kosztów.
+
+\paragraph{Job 5: create-pr}\mbox{}\\
+Uruchamia się tylko jeśli trening zakończył się sukcesem i model spełnił kryteria bramki jakości (\texttt{if: needs.train.outputs.improved == 'true'}). Tworzy pull request z gałęzi danych do \texttt{main} z opisem zawierającym metryki nowego modelu i poprzedniego baseline.
+
+\paragraph{Job 6: auto-merge}\mbox{}\\
+Włącza automatyczne scalanie pull requesta po pozytywnym przejściu statusowych sprawdzeń wymaganych przez reguły ochrony gałęzi.
+
+\subsection{Bramka jakości}
+
+Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacja jest w skrypcie \texttt{quality\_gate.py} i korzysta z API MLflow \cite{zaharia2018mlflow}.
+
+\paragraph{Pobieranie baseline}\mbox{}\\
+Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
+
+\begin{verbatim}
+client = MlflowClient(tracking_uri=mlflow_uri)
+versions = client.get_latest_versions(
+    "water-meter-segmentation",
+    stages=["Production"]
+)
+if versions:
+    baseline_run = client.get_run(versions[0].run_id)
+    baseline_dice = float(
+        baseline_run.data.metrics["val_dice"]
+    )
+else:
+    baseline_dice = 0.0  # pierwsze trenowanie
+\end{verbatim}
+
+\paragraph{Logika decyzyjna}\mbox{}\\
+Model jest uznany za ulepszony, jeśli obie metryki walidacyjne są wyższe od baseline:
+
+\begin{itemize}
+  \item \texttt{val\_dice > baseline\_dice}
+  \item \texttt{val\_iou > baseline\_iou}
+\end{itemize}
+
+Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w MLflow i archiwizuje poprzednią wersję. Wynik jest przekazywany jako output do GitHub Actions (\texttt{echo "improved=true" >> \$GITHUB\_OUTPUT}).
+
+\subsection{Automatyczne wdrożenie}
+
+Po scaleniu pull requesta z \texttt{main} uruchamiany jest workflow budujący i wdrażający nowy obraz Docker.
+
+\paragraph{Budowanie obrazu}\mbox{}\\
+Obraz jest budowany na podstawie pliku \texttt{docker/Dockerfile.serve}. Używa warstwy bazowej z PyTorch CPU, kopiuje kod API i instaluje zależności z \texttt{requirements.txt}. Po zbudowaniu obraz jest tagowany numerem wersji i hashiem commita, a następnie wysyłany do Amazon ECR:
+
+\begin{verbatim}
+docker build -f docker/Dockerfile.serve -t model-api .
+docker tag model-api:latest $ECR_REGISTRY/model-api:$VERSION
+docker push $ECR_REGISTRY/model-api:$VERSION
+\end{verbatim}
+
+\paragraph{Wdrożenie Helm}\mbox{}\\
+Helm \cite{helm_docs} aktualizuje deployment na klastrze k3s \cite{k3s_docs} nową wersją obrazu. Konfiguracja wdrożenia zdefiniowana jest w \texttt{infrastructure/helm-values.yaml}. Po wdrożeniu automatycznie wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
+
+% [UZUPEŁNIĆ: screenshot workflow zakończonego sukcesem w GitHub Actions]

@@ -1,0 +1,123 @@
+\section{Implementacja wdrożenia oraz użycia WIP}
+\label{sec:Implementacja_wdrozenia}
+
+Rozdział opisuje infrastrukturę, na której działa system, sposób jej konfiguracji oraz scenariusze użycia z perspektywy użytkownika.
+
+\subsection{Infrastruktura Terraform}
+
+Infrastruktura AWS jest zdefiniowana jako kod przy użyciu Terraform \cite{hashicorp_terraform}. Definicje znajdują się w katalogu \texttt{devops/terraform/}. Zastosowana architektura minimalizuje koszty --- używa wyłącznie zasobów niezbędnych do działania projektu i unika kosztownych komponentów zarządzanych przez AWS (EKS, RDS, NAT Gateway, Load Balancer).
+
+Tworzone zasoby:
+\begin{itemize}
+  \item \textbf{VPC i podsieć publiczna} --- prosta sieć z bezpośrednim dostępem do internetu przez Internet Gateway; eliminuje potrzebę NAT Gateway,
+  \item \textbf{Security Group} --- otwiera porty SSH (22), HTTP (80), NodePort Kubernetes (30000--32767) i port MLflow (5000) dla dozwolonych adresów IP,
+  \item \textbf{Instancja EC2} --- uruchamiana na żądanie przez workflow \cite{github_actions_docs}; typ instancji konfigurowalny przez zmienną (\texttt{t3.xlarge} dla produkcji ML),
+  \item \textbf{Amazon S3} --- dwa bucket'y: jeden dla artefaktów MLflow, drugi opcjonalnie dla danych treningowych DVC,
+  \item \textbf{Amazon ECR} --- rejestr obrazów Docker dla API modelu,
+  \item \textbf{IAM Role} --- rola instancji EC2 z uprawnieniami do odczytu i zapisu S3 oraz ECR.
+\end{itemize}
+
+Infrastruktura uruchamiana jest jednorazowo poleceniem \texttt{terraform apply}. Instancja EC2 jest następnie zatrzymywana i uruchamiana automatycznie przez workflow tylko na czas treningu i wdrożenia, co istotnie obniża koszty eksploatacji.
+
+% [UZUPEŁNIĆ: screenshot konsoli Terraform po apply]
+
+\subsection{Konfiguracja EC2 i k3s}
+
+Konfiguracja instancji EC2 odbywa się automatycznie przy pierwszym uruchomieniu za pomocą skryptu \texttt{user-data}. Skrypt jest szablonowany przez Terraform i zawiera zmienne takie jak adres bucket'a S3 czy region.
+
+Kroki wykonywane przez \texttt{user-data}:
+\begin{enumerate}
+  \item Instalacja zależności systemowych (\texttt{dnf install -y git curl libicu}).
+  \item Instalacja k3s --- uproszczonego Kubernetes \cite{k3s_docs}.
+  \item Instalacja MLflow i boto3 przez pip: \texttt{pip3 install --ignore-installed mlflow boto3}.
+  \item Konfiguracja MLflow jako usługi systemd:
+\begin{verbatim}
+[Service]
+ExecStart=mlflow server \
+  --host 0.0.0.0 --port 5000 \
+  --default-artifact-root s3://${mlflow_bucket}/
+\end{verbatim}
+  \item Instalacja GitHub Actions runnera jako usługi systemd.
+\end{enumerate}
+
+Instancja korzysta z Amazon Linux 2023, który oferuje nowszy OpenSSL 3.0 i lepszy ekosystem pakietów niż poprzednia wersja Amazon Linux 2. Po zakończeniu \texttt{user-data} instancja jest gotowa do przyjęcia zadań z GitHub Actions bez dalszej konfiguracji ręcznej.
+
+% [UZUPEŁNIĆ: screenshot działającego MLflow UI]
+
+\subsection{Konfiguracja Helm}
+
+API modelu wdrażane jest na klaster k3s za pomocą Helm \cite{helm_docs}. Chart konfiguruje następujące zasoby Kubernetes:
+\begin{itemize}
+  \item \textbf{Deployment} --- jedna replika kontenera z API; konfiguruje żądania i limity CPU/RAM,
+  \item \textbf{Service (NodePort)} --- udostępnia API na porcie 30080 węzła EC2; eliminuje potrzebę Load Balancera,
+  \item \textbf{ConfigMap} --- zmienne środowiskowe aplikacji (URI MLflow, ścieżki do modelu),
+  \item \textbf{Secret} --- poświadczenia AWS do pobrania modelu z S3.
+\end{itemize}
+
+Kluczowe wartości w pliku \texttt{infrastructure/helm-values.yaml}:
+\begin{verbatim}
+image:
+  repository: <account>.dkr.ecr.us-east-1.amazonaws.com/model-api
+  tag: latest
+env:
+  MLFLOW_TRACKING_URI: http://10.0.1.x:5000
+  MODEL_STAGE: Production
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+\end{verbatim}
+
+Po wdrożeniu API jest dostępne pod adresem \texttt{http://<ec2-public-ip>:30080}. Dostępne endpointy to \texttt{/health} (status usługi), \texttt{/predict} (predykcja segmentacji) i \texttt{/metrics} (metryki Prometheus).
+
+\subsection{Stos monitorowania}
+
+Monitoring oparty na Prometheus \cite{prometheus_docs} i Grafana wdrażany jest jako oddzielny stos na tym samym klastrze k3s. Składa się z trzech komponentów:
+
+\begin{itemize}
+  \item \textbf{Prometheus} --- zbiera metryki z endpointu \texttt{/metrics} API modelu co 15 sekund; konfiguracja scraping w \texttt{prometheus.yml},
+  \item \textbf{Grafana} --- wizualizuje metryki na predefiniowanych dashboardach; dostępna na porcie NodePort 30300,
+  \item \textbf{kube-state-metrics} --- dostarcza metryki Kubernetes (stan podów, zużycie zasobów węzła).
+\end{itemize}
+
+API modelu eksponuje metryki w formacie Prometheus przy użyciu biblioteki \texttt{prometheus\_client}. Śledzone metryki to:
+\begin{itemize}
+  \item \texttt{prediction\_requests\_total} --- łączna liczba żądań predykcji,
+  \item \texttt{prediction\_duration\_seconds} --- histogram czasów odpowiedzi,
+  \item \texttt{prediction\_errors\_total} --- liczba błędów.
+\end{itemize}
+
+% [UZUPEŁNIĆ: screenshot dashboardu Grafana z metrykami]
+
+\subsection{Workflow użytkownika}
+
+\subsubsection{Scenariusz 1: Dodanie nowych danych treningowych}
+
+Jest to główny scenariusz użycia systemu. Użytkownik chcący dostarczyć nowe obrazy wodomierzy wykonuje następujące kroki:
+
+\begin{enumerate}
+  \item Umieszcza pliki obrazów w \texttt{WMS/data/training/images/} i odpowiadające im maski w \texttt{WMS/data/training/masks/}.
+  \item Dodaje pliki do staging area Git: \texttt{git add WMS/data/training/}.
+  \item Tworzy commit: \texttt{git commit -m "data: add N new training samples"}.
+  \item Wywołuje \texttt{git push}.
+\end{enumerate}
+
+Hook pre-push automatycznie przekierowuje push na gałąź \texttt{data/TIMESTAMP}. Dalej system działa bez udziału użytkownika: walidacja, trening, bramka jakości, ewentualne scalenie. Użytkownik może śledzić postęp w zakładce Actions repozytorium GitHub.
+
+\subsubsection{Scenariusz 2: Predykcja lokalna}
+
+Użytkownik może uruchomić predykcję na nowych obrazach bez uruchamiania infrastruktury chmurowej:
+
+\begin{enumerate}
+  \item Przy pierwszym użyciu pobiera aktualny model Production:
+        \texttt{python WMS/scripts/sync\_model\_aws.py}
+  \item Umieszcza obrazy do segmentacji w \texttt{WMS/data/predict/input/}.
+  \item Uruchamia predykcję: \texttt{python WMS/predicts.py}
+  \item Wyniki zapisywane są w \texttt{WMS/data/predict/output/}.
+\end{enumerate}
+
+Skrypt \texttt{sync\_model\_aws.py} pobiera model zarejestrowany w MLflow jako Production i zapisuje go lokalnie. Model jest przechowywany w katalogu ignorowanym przez Git, więc nie trafia do repozytorium.
+
+\subsubsection{Scenariusz 3: Ręczne uruchomienie treningu}
+
+W sytuacjach wyjątkowych (np. zmiana hiperparametrów bez nowych danych) trening można uruchomić ręcznie przez zakładkę \textit{Actions} w GitHub, wybierając workflow \texttt{train.yml} i klikając \textit{Run workflow}. Ten tryb wymaga podania parametrów: branch'u z danymi oraz opcjonalnie liczby epok. Wynik treningu jest rejestrowany w MLflow, ale nie tworzy automatycznego pull requesta --- decyzja o wdrożeniu należy do użytkownika.

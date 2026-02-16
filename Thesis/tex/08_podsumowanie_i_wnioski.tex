@@ -1,0 +1,53 @@
+\section{Podsumowanie i wnioski WIP}
+\label{sec:Podsumowanie}
+
+\subsection{Realizacja celów pracy}
+
+Niniejsza praca stawiała sobie za cel zaprojektowanie, implementację i ocenę zautomatyzowanego pipeline CI/CD dla modeli uczenia maszynowego. Poniżej zestawiono cele sformułowane we wprowadzeniu z oceną stopnia ich realizacji.
+
+\begin{itemize}
+  \item \textbf{Zaprojektowanie architektury systemu automatyzacji} --- % [UZUPEŁNIĆ: ocena realizacji]
+  \item \textbf{Implementacja pipeline CI/CD integrującego walidację danych, trening i wdrożenie} --- % [UZUPEŁNIĆ: ocena realizacji]
+  \item \textbf{Wprowadzenie obiektywnej bramki jakości opartej na metrykach ML} --- % [UZUPEŁNIĆ: ocena realizacji]
+  \item \textbf{Porównanie podejścia ręcznego z zautomatyzowanym} --- % [UZUPEŁNIĆ: ocena realizacji]
+  \item \textbf{Realizacja w ramach budżetu AWS Academy ($\sim$\$50)} --- % [UZUPEŁNIĆ: ostateczny koszt]
+\end{itemize}
+
+\subsection{Wnioski}
+
+Na podstawie przeprowadzonych eksperymentów i obserwacji sformułowano następujące wnioski. Kontekst porównawczy oparty jest na literaturze z zakresu DevOps \cite{humble2010continuous} oraz MLOps \cite{kreuzberger2023mlops}.
+
+\begin{enumerate}
+  \item Automatyzacja pipeline CI/CD dla modeli ML istotnie skraca czas potrzebny do wdrożenia nowej wersji modelu w porównaniu do podejścia ręcznego. % [UZUPEŁNIĆ: konkretne liczby z eksperymentów]
+
+  \item Wprowadzenie dynamicznej bramki jakości opartej na metrykach MLflow eliminuje ryzyko przypadkowego wdrożenia modelu gorszego od aktualnie produkcyjnego, co jest szczególnie istotne przy niedeterministycznym procesie trenowania.
+
+  \item Wersjonowanie danych za pomocą DVC \cite{dvc_docs} zapewnia pełną odtwarzalność eksperymentów --- dla dowolnej wersji modelu możliwe jest odtworzenie dokładnego zbioru danych, na którym był trenowany.
+
+  \item Zastosowanie k3s zamiast zarządzanego Kubernetes (EKS) okazało się wystarczające dla projektu proof of concept i pozwoliło znacząco ograniczyć koszty infrastruktury.
+
+  \item Architektura stop/start instancji EC2 jest efektywna kosztowo, ale wprowadza opóźnienie na uruchomienie instancji i runnera ($\sim$3--5 minut). W środowisku produkcyjnym z wymaganiami SLA należałoby rozważyć utrzymywanie instancji aktywnej.
+\end{enumerate}
+
+\subsection{Ograniczenia}
+
+Projekt realizowany był jako proof of concept z następującymi świadomymi ograniczeniami:
+
+\begin{itemize}
+  \item \textbf{Budżet AWS Academy} --- sesje laboratoryjne wygasają co 4 godziny, IAM role mają ograniczone uprawnienia (m.in. brak \texttt{s3:PutObject} dla lokalnych poświadczeń). Wymusiło to przeniesienie wszystkich operacji S3 do GitHub Actions.
+  \item \textbf{Single-node k3s} --- brak wysokiej dostępności. Awaria instancji EC2 powoduje niedostępność całego systemu.
+  \item \textbf{Mały zbiór danych} --- eksperyment przeprowadzono na zbiorze % [UZUPEŁNIĆ: liczba] obrazów. Zachowanie systemu przy znacznie większych zbiorach nie było testowane.
+  \item \textbf{Jeden model} --- architektura jest zaprojektowana pod konkretny model (U-Net dla segmentacji). Generalizacja na inne typy modeli wymagałaby modyfikacji skryptów walidacji i bramki jakości.
+\end{itemize}
+
+\subsection{Kierunki dalszego rozwoju}
+
+System stanowi solidną bazę, którą można rozbudować w kilku kierunkach:
+
+\begin{itemize}
+  \item \textbf{Multi-node Kubernetes} --- zastąpienie single-node k3s klastrem zapewniającym wysoką dostępność i możliwość skalowania poziomego.
+  \item \textbf{Experiment tracking} --- rozbudowa wykorzystania MLflow o śledzenie hiperparametrów i automatyczne porównywanie wielu eksperymentów.
+  \item \textbf{Data drift monitoring} --- dodanie mechanizmu wykrywającego rozbieżność między danymi treningowymi a produkcyjnymi.
+  \item \textbf{A/B testing} --- wdrożenie mechanizmu stopniowego rollout nowej wersji modelu z automatycznym rollback przy pogorszeniu metryk.
+  \item \textbf{Generalizacja} --- abstrakcja pipeline pod inne typy modeli i zadań ML, nie tylko segmentację obrazów.
+\end{itemize}

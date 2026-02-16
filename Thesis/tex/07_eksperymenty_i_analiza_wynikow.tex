@@ -1,0 +1,135 @@
+\section{Eksperymenty i analiza wyników WIP}
+\label{sec:Eksperymenty}
+
+\subsection{Metodologia porównania}
+
+Celem eksperymentów jest ilościowe i jakościowe porównanie trzech podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}:
+
+\begin{enumerate}
+  \item \textbf{Podejście ręczne} --- wszystkie kroki (przygotowanie danych, trening, walidacja, wdrożenie) wykonywane przez człowieka bez automatyzacji.
+  \item \textbf{Uproszczone CI/CD} --- pipeline z częściową automatyzacją (automatyczny trening po merge, ręczna walidacja jakości i wdrożenie).
+  \item \textbf{Zautomatyzowane CI/CD (niniejszy projekt)} --- pełna automatyzacja od push danych do wdrożenia modelu.
+\end{enumerate}
+
+Porównanie obejmuje następujące wymiary:
+\begin{itemize}
+  \item czas potrzebny do wykonania każdego scenariusza,
+  \item jakość modelu (metryki Dice i IoU),
+  \item pracochłonność (liczba ręcznych kroków),
+  \item ryzyko błędu ludzkiego,
+  \item skalowalność procesu.
+\end{itemize}
+
+\subsection{Czasy wykonania scenariuszy}
+
+Tabela \ref{tab:czasy} przedstawia zmierzone czasy dla każdego podejścia w scenariuszu dodania nowej partii danych treningowych i wdrożenia ulepszonego modelu.
+
+\begin{table}[H]
+\centering
+\caption{Porównanie czasów wykonania scenariuszy}
+\label{tab:czasy}
+\begin{tabular}{|l|r|r|r|}
+\hline
+\textbf{Etap} & \textbf{Ręczny} & \textbf{Uproszczone CI/CD} & \textbf{Zautomatyzowane CI/CD} \\
+\hline
+Przygotowanie danych & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & $<1$ min \\
+Walidacja danych & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] \\
+Trening modelu & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] \\
+Ocena jakości & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & $<1$ min \\
+Wdrożenie & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] \\
+\hline
+\textbf{Łącznie} & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] & % [UZUPEŁNIĆ: min] \\
+\hline
+\end{tabular}
+\end{table}
+
+% [UZUPEŁNIĆ: komentarz do wyników tabeli]
+
+\subsection{Metryki modelu}
+
+Tabela \ref{tab:metryki} przedstawia metryki modelu dla kolejnych wersji wytrenowanych w ramach eksperymentów. Baseline pochodzi z repozytorium referencyjnego \textit{Water-Meters-Segmentation} \cite{kaggle_water_meters}. Metryki są rejestrowane automatycznie przez MLflow \cite{zaharia2018mlflow} podczas każdego treningu.
+
+\begin{table}[H]
+\centering
+\caption{Metryki jakości modelu dla kolejnych wersji}
+\label{tab:metryki}
+\begin{tabular}{|l|c|c|l|}
+\hline
+\textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Uwagi} \\
+\hline
+Baseline (referencyjny) & 0{,}9275 & 0{,}8865 & Oryginalny model \\
+v1 --- pierwsze trenowanie & % [UZUPEŁNIĆ] & % [UZUPEŁNIĆ] & % [UZUPEŁNIĆ] \\
+v2 --- po dodaniu danych & % [UZUPEŁNIĆ] & % [UZUPEŁNIĆ] & % [UZUPEŁNIĆ] \\
+\hline
+\end{tabular}
+\end{table}
+
+% [UZUPEŁNIĆ: screenshoty z MLflow UI z wykresami metryk]
+
+\subsection{Metryki infrastruktury}
+
+\subsubsection{Zużycie zasobów podczas treningu}
+
+% [UZUPEŁNIĆ: screenshoty z Grafana - CPU/RAM podczas treningu na EC2]
+
+Podczas treningu modelu monitorowano obciążenie instancji EC2. Kluczowe obserwacje:
+\begin{itemize}
+  \item szczytowe zużycie CPU: % [UZUPEŁNIĆ] \%,
+  \item szczytowe zużycie RAM: % [UZUPEŁNIĆ] GB z % [UZUPEŁNIĆ] GB dostępnych,
+  \item czas treningu jednej epoki: % [UZUPEŁNIĆ] s.
+\end{itemize}
+
+\subsubsection{Zużycie zasobów podczas serwowania}
+
+% [UZUPEŁNIĆ: screenshoty z Grafana - metryki API w trakcie testów obciążeniowych]
+
+API modelu serwującego predykcje charakteryzuje się następującymi parametrami wydajnościowymi:
+\begin{itemize}
+  \item średni czas odpowiedzi dla jednego obrazu: % [UZUPEŁNIĆ] ms,
+  \item przepustowość: % [UZUPEŁNIĆ] żądań/sekundę,
+  \item zużycie RAM przez pod: % [UZUPEŁNIĆ] MB.
+\end{itemize}
+
+\subsubsection{Koszty infrastruktury AWS}
+
+\begin{table}[H]
+\centering
+\caption{Szacowane koszty infrastruktury AWS}
+\label{tab:koszty}
+\begin{tabular}{|l|r|l|}
+\hline
+\textbf{Zasób} & \textbf{Koszt} & \textbf{Uwagi} \\
+\hline
+EC2 t3.large (trening) & % [UZUPEŁNIĆ] USD/h & Uruchamiana tylko podczas treningu \\
+EC2 t3.large (serwowanie) & % [UZUPEŁNIĆ] USD/h & Stop/start przez workflow \\
+S3 (artefakty) & % [UZUPEŁNIĆ] USD/mies. & Zależy od liczby modeli \\
+ECR (obrazy) & % [UZUPEŁNIĆ] USD/mies. & \\
+\hline
+\textbf{Łącznie (projekt)} & % [UZUPEŁNIĆ] USD & Za cały okres realizacji \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Ocena jakościowa}
+
+\subsubsection{Łatwość wdrożenia}
+
+% [UZUPEŁNIĆ: ocena na podstawie doświadczeń z implementacji]
+
+\subsubsection{Stabilność systemu}
+
+W trakcie testów zaobserwowano następujące zachowania systemu w sytuacjach wyjątkowych:
+\begin{itemize}
+  \item \textbf{Niepoprawne dane} --- walidator odrzucał dane z komunikatem i nie uruchamiał treningu,
+  \item \textbf{Model gorszy od baseline} --- bramka jakości odrzucała model bez tworzenia PR,
+  \item \textbf{Awaria instancji EC2} --- job \texttt{stop-infra} uruchamiał się zawsze (\texttt{if: always()}), zapobiegając wyciekom kosztów.
+\end{itemize}
+
+\subsubsection{Skalowalność}
+
+Zastosowane podejście ma następujące ograniczenia skalowalności:
+\begin{itemize}
+  \item single-node k3s --- brak wysokiej dostępności,
+  \item jeden runner EC2 --- brak równoległych treningów,
+  \item model proof of concept --- nie testowano przy zbiorach $>1000$ obrazów.
+\end{itemize}

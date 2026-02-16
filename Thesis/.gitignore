@@ -1,0 +1,6 @@
+# Latex output
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.synctex.gz
