@@ -3,6 +3,7 @@
 # Override these values in project-specific helm-values.yaml
 
 replicaCount: 1
+deploymentStrategy: Recreate
 
 image:
   repository: ""  # Must be overridden (e.g., ECR URL)
