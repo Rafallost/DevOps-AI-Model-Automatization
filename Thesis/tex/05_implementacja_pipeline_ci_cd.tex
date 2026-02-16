@@ -20,7 +20,9 @@ Całość wykonuje się w mniej niż 10 sekund, ponieważ hook nie wymaga połą
 
 \subsection{Walidacja danych}
 
+\begin{sloppypar}
 Po wypchnięciu gałęzi danych uruchamia się pierwszy job workflow \texttt{training-data-pipeline.yaml} \cite{github_actions_docs}: \texttt{merge-and-validate}. Składa się on z dwóch faz.
+\end{sloppypar}
 
 \paragraph{Faza scalania}\mbox{}\\
 Job pobiera istniejące dane z Amazon S3 (za pomocą poświadczeń przechowywanych w sekretach GitHub), scala je z nowo dostarczonymi plikami i aktualizuje manifesty DVC. Scalanie jest idempotentne --- pliki o identycznej nazwie i sumie kontrolnej nie są duplikowane.

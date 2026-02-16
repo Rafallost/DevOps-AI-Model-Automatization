@@ -80,7 +80,9 @@ Monitoring oparty na Prometheus \cite{prometheus_docs} i Grafana wdrażany jest 
   \item \textbf{kube-state-metrics} --- dostarcza metryki Kubernetes (stan podów, zużycie zasobów węzła).
 \end{itemize}
 
+\begin{sloppypar}
 API modelu eksponuje metryki w formacie Prometheus przy użyciu biblioteki \texttt{prometheus\_client}. Śledzone metryki to:
+\end{sloppypar}
 \begin{itemize}
   \item \texttt{prediction\_requests\_total} --- łączna liczba żądań predykcji,
   \item \texttt{prediction\_duration\_seconds} --- histogram czasów odpowiedzi,
@@ -110,7 +112,9 @@ Użytkownik może uruchomić predykcję na nowych obrazach bez uruchamiania infr
 
 \begin{enumerate}
   \item Przy pierwszym użyciu pobiera aktualny model Production:
-        \texttt{python WMS/scripts/sync\_model\_aws.py}
+        \begin{lstlisting}[numbers=none,frame=none,backgroundcolor=\color{white},basicstyle=\ttfamily\small,xleftmargin=0pt]
+python WMS/scripts/sync_model_aws.py
+\end{lstlisting}
   \item Umieszcza obrazy do segmentacji w \texttt{WMS/data/predict/input/}.
   \item Uruchamia predykcję: \texttt{python WMS/predicts.py}
   \item Wyniki zapisywane są w \texttt{WMS/data/predict/output/}.
