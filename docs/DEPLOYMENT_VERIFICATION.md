@@ -369,7 +369,7 @@ curl -o test_meter.jpg \
 ```bash
 # Send POST request with image
 curl -X POST http://$EC2_IP:$NODE_PORT/predict \
-  -F "file=@test_meter.jpg" \
+  -F "image=@test_meter.jpg" \
   -o predicted_mask.png
 
 # Check response
