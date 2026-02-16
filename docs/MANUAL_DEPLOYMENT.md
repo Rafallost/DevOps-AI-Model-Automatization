@@ -420,7 +420,7 @@ curl -o test_meter.jpg https://example.com/water_meter.jpg
 
 # Send prediction request
 curl -X POST http://$EC2_IP:30080/predict \
-  -F "file=@test_meter.jpg" \
+  -F "image=@test_meter.jpg" \
   -o predicted_mask.png
 
 # Check if mask was generated

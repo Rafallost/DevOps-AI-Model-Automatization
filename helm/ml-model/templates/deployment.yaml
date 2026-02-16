@@ -9,6 +9,8 @@ metadata:
     heritage: {{ .Release.Service }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.deploymentStrategy | default "Recreate" }}
   selector:
     matchLabels:
       app: {{ include "ml-model.name" . }}
