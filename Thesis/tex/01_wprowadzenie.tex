@@ -16,11 +16,19 @@ W szczególności pojawiają się następujące problemy:
 
 Jednocześnie, jak powszechnie wiadomo, modele sztucznej inteligencji uczą się na podstawie zbiorów danych treningowych, a następnie wykorzystują wyuczone wzorce do rozwiązywania nowych problemów. Obserwacja ta stała się punktem wyjścia do rozważenia możliwości zastosowania modeli AI w obszarze automatycznego generowania wspólnych, powtarzalnych fragmentów kodu testowego na podstawie już istniejących przykładów.
 
+Jednakże, aby taki system mógł być skutecznie wykorzystany w praktyce, konieczne jest zapewnienie odpowiedniego procesu ciągłej integracji i dostarczania (CI/CD), który umożliwi automatyczne trenowanie, ocenę jakości oraz wdrażanie modeli AI w sposób powtarzalny i kontrolowany, lub oddelegowanie pracownika do utrzymania takiego procesu w sposób manualny.
+
+W ten sposób pojawiają dwa kluczowe pytania, które stanowią oś projektu:
+\begin{enumerate}
+  \item Czy możliwe i opłacalne jest stworzenie modelu SI który będzie obsługiwał automatyczne generowanie fragmentów kodu testowego?
+  \item Czy bardziej opłacalne jest oddelegowanie jednego pracownika do ręcznego utrzymywania i rozwijania tego oprogramowania, czy też lepszym rozwiązaniem jest automatyzacja tego procesu z wykorzystaniem narzędzi DevOps oraz pipeline’ów CI/CD?
+\end{enumerate}
+
 \subsection{Założenia}
 
-W odpowiedzi na postawione pytania badawcze rozważono zastosowanie modelu, który został wstępnie przeuczony na dostępnych danych, a następnie rozwijany wraz z pozyskiwaniem kolejnych zbiorów treningowych.
+Przez fakt wysokiego skomplikowania problemu, a także ograniczonego czasu realizacji projektu, zdecydowano się na przyjęcie 
 
-Na tym etapie pojawia się pierwszy istotny problem założeniowy, a mianowicie konieczność posiadania modelu sztucznej inteligencji. Dla uproszczenia przyjęto, że model SI dostarczany jest przez zewnętrzną firmę, natomiast zakres pracy obejmuje jego wykorzystanie, dalsze uczenie oraz wdrażanie. W tym kontekście pojawia się kluczowe pytanie niniejszej pracy: czy bardziej opłacalne jest oddelegowanie jednego pracownika do ręcznego utrzymywania i rozwijania tego oprogramowania, czy też lepszym rozwiązaniem jest automatyzacja tego procesu z wykorzystaniem narzędzi DevOps oraz pipeline’ów CI/CD?
+Jako substytut modelu uczącego się schamatów generowania fragmentów kodu, zastosowałem znacznie prostrzy model, nad opracowaniem którego pracowałem, a dokładniej segmentacji wodomierzy. Zakładamy . Na tym etapie pojawia się pierwszy istotny problem założeniowy, a mianowicie konieczność posiadania modelu sztucznej inteligencji. Dla uproszczenia przyjęto, że model SI dostarczany jest przez zewnętrzną firmę, natomiast zakres pracy obejmuje jego wykorzystanie, dalsze uczenie oraz wdrażanie. W tym kontekście pojawia się kluczowe pytanie niniejszej pracy: czy bardziej opłacalne jest oddelegowanie jednego pracownika do ręcznego utrzymywania i rozwijania tego oprogramowania, czy też lepszym rozwiązaniem jest automatyzacja tego procesu z wykorzystaniem narzędzi DevOps oraz pipeline’ów CI/CD?
 
 W podejściu manualnym proces ponownego uczenia i wdrażania modelu realizowany jest przy znaczącym udziale człowieka. Obejmuje on ręczne przygotowanie danych, uruchamianie treningu, walidację wyników oraz publikację nowej wersji modelu. Taki sposób pracy, mimo swojej prostoty, wiąże się z ryzykiem błędów ludzkich, trudnościami w zachowaniu powtarzalności eksperymentów oraz ograniczoną skalowalnością procesu.
 
