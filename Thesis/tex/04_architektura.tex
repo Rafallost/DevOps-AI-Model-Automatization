@@ -71,7 +71,11 @@ System zawiera komponenty monitoringu oparte na Prometheus \cite{prometheus_docs
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{img/02_architektura_systemu/architecture-overview.png}
+\IfFileExists{img/02_architektura_systemu/architecture-overview.png}{%
+  \includegraphics[width=\textwidth]{img/02_architektura_systemu/architecture-overview.png}%
+}{%
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{1cm}\textit{[Do uzupełnienia: diagram C4 architecture-overview.png]}\vspace{1cm}}}%
+}
 \caption{Diagram kontekstowy C4 przedstawiający główne komponenty systemu oraz ich interakcje}
 \label{fig:architecture-overview}
 \end{figure}
@@ -82,7 +86,11 @@ Rysunek \ref{fig:architecture-overview} przedstawia kontekst systemu w notacji C
 
 \begin{figure}[H]
 \centering
-\includegraphics[scale=0.09]{img/02_architektura_systemu/data-flow.png}
+\IfFileExists{img/02_architektura_systemu/data-flow.png}{%
+  \includegraphics[scale=0.09]{img/02_architektura_systemu/data-flow.png}%
+}{%
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{1cm}\textit{[Do uzupełnienia: diagram przepływu danych data-flow.png]}\vspace{1cm}}}%
+}
 \caption{Diagram przepływu danych treningowych przez system}
 \label{fig:data-flow}
 \end{figure}
