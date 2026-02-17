@@ -1,21 +1,30 @@
 \section{Architektura Systemu}
 \label{sec:Architektura_systemu}
 
-Niniejszy rozdział opisuje zaprojektowaną architekturę systemu: jakie komponenty zostały wybrane, jak zostały ze sobą połączone i jakimi przesłankami kierowano się przy podejmowaniu kluczowych decyzji projektowych. Opis wdrożenia i szczegółów implementacji poszczególnych elementów zawarty jest w kolejnych rozdziałach.
+Niniejszy rozdział opisuje zaprojektowaną architekturę systemu: wybrane komponenty, ich wzajemne powiązania i przesłanki kluczowych decyzji projektowych. Szczegóły implementacji poszczególnych elementów zawarte są w rozdziałach~5 i~6.
 
 \subsection{Cele i ograniczenia projektowe}
 
-Projektując system, kierowano się czterema głównymi celami:
+Projektując system, kierowano się pięcioma celami:
 
 \begin{enumerate}
-  \item \textbf{Pełna automatyzacja} --- dodanie nowych danych treningowych powinno wymagać wyłącznie wykonania polecenia \texttt{git push}; wszystkie dalsze kroki (walidacja, trening, ocena jakości, wdrożenie) powinny odbywać się bez udziału użytkownika.
-  \item \textbf{Reprodukowalność} --- każda wersja modelu musi być jednoznacznie powiązana z wersją kodu, wersją danych treningowych i zapisanymi metrykami.
-  \item \textbf{Kontrola kosztów} --- projekt realizowany jest w ramach akademickiego konta AWS z budżetem około 50~USD; zasoby obliczeniowe uruchamiane są tylko wtedy, gdy są faktycznie potrzebne.
-  \item \textbf{Kontrola czasu} --- Labolatorium AWS może być uruchomione maksymalnie 4 godziny ciągiem, a trening modelu nie powinien przekraczać 2,5 godziny,aby umożliwić wykonanie pełnego cyklu CI/CD w ramach jednego uruchomienia.
-  \item \textbf{Porównywalność} --- system musi umożliwiać zebranie mierzalnych danych (czas, koszt, liczba kroków manualnych) do porównania podejścia automatycznego z manualnym.
+  \item \textbf{Pełna automatyzacja} --- jedyną akcją użytkownika jest \texttt{git push}; walidacja, trening, ocena jakości i wdrożenie odbywają się bez interwencji.
+  \item \textbf{Reprodukowalność} --- każda wersja modelu musi być powiązana z wersją kodu, wersją danych i zapisanymi metrykami.
+  \item \textbf{Kontrola kosztów} --- projekt realizowany w ramach konta AWS Academy z budżetem ~50~USD; zasoby uruchamiane tylko gdy potrzebne.
+  \item \textbf{Kontrola czasu} --- trening nie może przekraczać 2,5~h, aby zmieścić się w 4-godzinnym oknie sesji laboratorium AWS.
+  \item \textbf{Porównywalność} --- system zbiera mierzalne dane (czas, koszt, liczba kroków manualnych) do porównania z podejściem manualnym.
 \end{enumerate}
 
-Ograniczenia budżetowe miały bezpośredni wpływ na wybór technologii. Wykluczone zostały usługi zarządzane o wysokim koszcie stałym: Amazon EKS (zarządzany Kubernetes ~\$150/mies.), Amazon RDS (zarządzana baza danych), NAT Gateway (~\$32/mies.) oraz Application Load Balancer (~\$18/mies.). W ich miejsce zastosowano tańsze odpowiedniki: k3s na pojedynczej instancji EC2 zamiast EKS, SQLite jako backend MLflow zamiast RDS, oraz dostęp przez publiczny adres IP z NodePort zamiast load balancera. Szacowany koszt systemu przy typowym obciążeniu deweloperskim (kilka uruchomień tygodniowo) wynosi około 11~USD miesięcznie zakładając lekki ruch.
+Ograniczenia budżetowe wykluczyły usługi o wysokim koszcie stałym: EKS (~\$150/mies.), RDS (~\$30/mies.), NAT Gateway (~\$32/mies.) i ALB (~\$18/mies.) --- zastąpione przez k3s na EC2, SQLite i NodePort.
+
+Dodatkowym ograniczeniem środowiska AWS Academy jest brak możliwości tworzenia ról IAM oraz konfiguracji federacji tożsamości OIDC. Mechanizmów, które w standardowych środowiskach produkcyjnych pozwalają GitHub Actions uwierzytelniać się w AWS bez przechowywania długoterminowych kluczy. W konsekwencji tymczasowe klucze sesji (generowane przy każdym uruchomieniu laboratorium) przechowywane są jako zaszyfrowane sekrety repozytorium GitHub i wstrzykiwane do zmiennych środowiskowych workflow podczas każdego uruchomienia \cite{github_actions_docs}. Sekrety są rotowane ręcznie przy każdym odnowieniu sesji, co stanowi kompromis akceptowalny w kontekście projektu badawczego (rysunek~\ref{fig:github-secrets}).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\linewidth]{img/03_architektura_systemu/github_secrets.png}
+  \caption{Konfiguracja sekretów GitHub Actions przechowujących tymczasowe poświadczenia AWS.}
+  \label{fig:github-secrets}
+\end{figure}
 
 \subsection{Struktura repozytoriów}
 
@@ -26,7 +35,7 @@ Projekt korzysta z dwóch repozytoriów Git połączonych mechanizmem submoduł�
   \item \textbf{DevOps-AI-Model-Automatization} --- repozytorium infrastruktury, dołączone jako submoduł pod ścieżką \texttt{devops/}; zawiera moduły Terraform, skrypty konfiguracyjne EC2 oraz niniejszą pracę dyplomową.
 \end{itemize}
 
-Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieniają się często i wyzwalają automatyczne procesy, natomiast definicja infrastruktury zmienia się rzadko i jest zarządzana ręcznie. Dzięki mechanizmowi submodułów konkretna wersja infrastruktury jest powiązana z konkretną wersją kodu aplikacji, co zachowuje pełną reprodukowalność środowiska.
+Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieniają się często i wyzwalają automatyczne procesy, natomiast definicja infrastruktury zmienia się rzadko i jest zarządzana ręcznie. Dzięki mechanizmowi submodułów konkretna wersja infrastruktury jest powiązana z konkretną wersją kodu aplikacji, co zachowuje pełną spójność środowiska.
 
 \begin{figure}[H]
 \centering
@@ -83,11 +92,9 @@ Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieni
 \label{fig:repo-structure}
 \end{figure}
 
-
 \subsection{Warstwy architektury}
 
 System zorganizowany jest w cztery logiczne warstwy odpowiadające granicom widocznym na diagramie C4 (rysunek~\ref{fig:architecture-overview}): warstwa użytkownika, warstwa kontroli wersji i automatyzacji, warstwa infrastruktury chmurowej oraz warstwa platformy ML i serwowania.
-
 \begin{figure}[H]
 \centering
 \IfFileExists{img/03_architektura_systemu/C4.pdf}{%

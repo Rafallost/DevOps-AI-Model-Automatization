@@ -59,7 +59,7 @@ Kluczowe koncepcje Gita:
   \item \textbf{Hook} --- skrypt uruchamiany automatycznie w odpowiedzi na zdarzenie Gita (np. \texttt{pre-push}).
 \end{itemize}
 
-GitHub to platforma hostingowa dla repozytoriów Git, rozbudowana o funkcje współpracy zespołowej: pull requesty, przeglądy kodu, zarządzanie zadaniami oraz zintegrowane CI/CD w postaci GitHub Actions. W kontekście niniejszego projektu GitHub pełni rolę centralnego punktu integracji --- każda zmiana przechodzi przez repozytorium i może automatycznie uruchamiać kolejne etapy pipeline'u.
+GitHub to platforma hostingowa dla repozytoriów Git, rozbudowana o funkcje współpracy zespołowej: pull requesty, przeglądy kodu, zarządzanie zadaniami oraz zintegrowane CI/CD w postaci GitHub Actions. W kontekście niniejszego projektu GitHub pełni rolę centralnego punktu integracji. Każda zmiana przechodzi przez repozytorium i może automatycznie uruchamiać kolejne etapy pipeline'u.
 
 \subsection{GitHub Actions}
 
@@ -74,7 +74,7 @@ Podstawowe pojęcia:
   \item \textbf{Artefakt} --- plik lub katalog przekazywany między jobami albo pobierany po zakończeniu workflow.
 \end{itemize}
 
-Kluczową cechą GitHub Actions jest możliwość użycia \textbf{self-hosted runners} --- maszyn zarządzanych przez użytkownika, co w niniejszym projekcie pozwala uruchamiać trening bezpośrednio na instancji EC2 wyposażonej w odpowiedni sprzęt obliczeniowy, bez potrzeby przekazywania danych treningowych przez sieć do zewnętrznego runnera.
+Kluczową cechą GitHub Actions jest możliwość użycia \textbf{self-hosted runners}. Maszyny zarządzane przez użytkownika, co w niniejszym projekcie pozwala uruchamiać trening bezpośrednio na instancji EC2 wyposażonej w odpowiedni sprzęt obliczeniowy, bez potrzeby przekazywania danych treningowych przez sieć do zewnętrznego runnera.
 
 \subsection{Konteneryzacja --- Docker}
 
