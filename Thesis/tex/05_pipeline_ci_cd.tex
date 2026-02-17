@@ -16,7 +16,11 @@ Jeśli zmiany dotyczą danych treningowych, hook:
 
 Całość wykonuje się w mniej niż 10 sekund, ponieważ hook nie wymaga połączenia z AWS ani lokalnych poświadczeń chmurowych. Merge danych z historycznym zbiorem w S3 odbywa się po stronie GitHub Actions.
 
-% [UZUPEŁNIĆ: screenshot działającego hooka w terminalu]
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/hook.png}
+  \caption{Wynik wypchania nowych danych na gałąź \texttt{data/TIMESTAMP}.}
+\end{figure}
 
 \subsection{Walidacja danych}
 
@@ -45,38 +49,69 @@ for img_stem in image_stems:
         errors.append(f"Brak maski dla: {img_stem}")
 \end{verbatim}
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/05_pipline_ci_cd/example_qa_stop.png}
+    \caption{Przykład komentarza z wynikiem walidacji danych. W tym przypadku wykryto złą rozdzielczość, co skutkuje zatrzymaniem dalszych kroków pipeline.}
+    \label{fig:workflow-concurrency}
+\end{figure}
+
 \subsection{Pipeline treningowy}
 
-Główny workflow \texttt{training-data-pipeline.yaml} składa się z sześciu jobów wykonywanych sekwencyjnie z wyjątkiem \texttt{stop-infra}, który uruchamia się zawsze niezależnie od wyników poprzednich kroków.
+Główny workflow \texttt{training-data-pipeline.yaml} składa się z ośmiu jobów. Joby 1--3 wykonywane są sekwencyjnie. Po zakończeniu treningu workflow rozgałęzia się: gdy model się nie poprawił, uruchamia się \texttt{stop-infra} (job 4); gdy model się poprawił --- równolegle uruchamiają się \texttt{deploy} (job 5) i \texttt{create-pr} (job 7). Job 6 zatrzymuje EC2 po wdrożeniu, a job 8 finalizuje scalenie.
 
 \begin{figure}[H]
-\centering
-% [UZUPEŁNIĆ: diagram sekwencji 6 jobów workflow]
-\caption{Sekwencja jobów w workflow \texttt{training-data-pipeline.yaml}}
-\label{fig:workflow-jobs}
+    \centering
+    \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/Training_pipline.png}
+    \caption{Sekwencja jobów w workflow \texttt{training-data-pipeline.yaml}}
+    \label{fig:workflow-jobs}
 \end{figure}
 
 \paragraph{Job 1: merge-and-validate}\mbox{}\\
-Opisany w poprzedniej sekcji. Pobiera dane z S3, scala, waliduje i aktualizuje DVC.
+Opracowane we wcześniejszym fragmencie. Pobiera istniejące dane z S3, scala je z nowo dostarczonymi plikami, uruchamia walidację, aktualizuje manifesty DVC i przesyła scalony zbiór jako artefakt GitHub Actions..
 
 \paragraph{Job 2: start-infra}\mbox{}\\
-Uruchamia instancję EC2 za pomocą AWS CLI (\texttt{aws ec2 start-instances}). Następnie czeka na pojawienie się GitHub Actions runnera na tej instancji, odpytując API GitHub co 30 sekund przez maksymalnie 10 minut.
+Wykonuje się na hoście GitHub (nie na EC2) i jest odpowiedzialny wyłącznie za uruchomienie infrastruktury. Wywołuje AWS CLI (\texttt{aws ec2 start-instances}) z identyfikatorem instancji zapisanym w sekretach repozytorium. Po wysłaniu polecenia co 30 sekund sprawdza API GitHub, czy self-hosted runner przypisany do tej instancji pojawił się w stanie \textit{online} --- czeka maksymalnie 10 minut. Dzięki temu każdy kolejny job pewnie trafi na już działającą instancję.
 
 \paragraph{Job 3: train}\mbox{}\\
-Wykonuje się na self-hosted runnerze zainstalowanym na instancji EC2. Pobiera dane z S3, uruchamia skrypt \texttt{train.py}, który trenuje model U-Net przez zdefiniowaną liczbę epok i loguje metryki do MLflow. Po zakończeniu treningu skrypt \texttt{quality\_gate.py} porównuje wyniki z modelem Production.
+Jedyny job wykonywany na self-hosted runnerze, czyli bezpośrednio na instancji EC2. Pobiera scalony zbiór danych z artefaktu GitHub Actions, uruchamia skrypt \texttt{train.py}, który inicjalizuje model U-Net z seedem równym numerowi uruchomienia (\texttt{run\_number}), trenuje przez zdefiniowaną liczbę epok i loguje metryki \texttt{val\_dice} oraz \texttt{val\_iou} do MLflow. Po zakończeniu treningu skrypt \texttt{quality\_gate.py} pobiera metryki aktualnego modelu Production z rejestru MLflow, porównuje je z wynikami nowego treningu i ustawia output \texttt{improved=true} lub \texttt{improved=false}, sterując dalszym przebiegiem workflow.
 
 \paragraph{Job 4: stop-infra}\mbox{}\\
-Zatrzymuje instancję EC2 niezależnie od wyniku treningu (\texttt{if: always()}). Zapobiega to przypadkowemu pozostawieniu instancji uruchomionej i naliczaniu kosztów.
+Zatrzymuje instancję EC2 gdy trening zakończył się błędem lub model nie poprawił wyników (\texttt{if: always() \&\& (train.result != 'success' || improved != 'true')}). Jest to reużywalny workflow wywołujący \texttt{aws ec2 stop-instances}. Dzięki warunkowi \texttt{always()} job uruchamia się nawet gdy poprzednie jobe zakończyły się wyjątkiem, eliminując ryzyko pozostawienia uruchomionej instancji i nieoczekiwanych kosztów.
 
-\paragraph{Job 5: create-pr}\mbox{}\\
-Uruchamia się tylko jeśli trening zakończył się sukcesem i model spełnił kryteria bramki jakości (\texttt{if: needs.train.outputs.improved == 'true'}). Tworzy pull request z gałęzi danych do \texttt{main} z opisem zawierającym metryki nowego modelu i poprzedniego baseline.
+\paragraph{Job 5: deploy}\mbox{}\\
+Uruchamia się wyłącznie jeśli model spełnił kryteria bramki jakości (\texttt{if: improved == 'true'}). Wykonuje się na self-hosted runnerze na EC2. Buduje obraz Docker na podstawie \texttt{docker/Dockerfile.serve}, taguje go numerem wersji i hashiem commita, uwierzytelnia się w Amazon ECR i wgrywa obraz. Następnie wywołuje \texttt{helm upgrade}, który zaktualizuje deployment na klastrze k3s do nowej wersji obrazu --- kontener przy starcie pobiera model ze stadium Production z rejestru MLflow, co oddziela wersję obrazu od wersji modelu. Po wdrożeniu wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
 
-\paragraph{Job 6: auto-merge}\mbox{}\\
-Włącza automatyczne scalanie pull requesta po pozytywnym przejściu statusowych sprawdzeń wymaganych przez reguły ochrony gałęzi.
+\paragraph{Job 6: stop-after-deploy}\mbox{}\\
+Zatrzymuje instancję EC2 po zakończeniu joba \texttt{deploy} (\texttt{if: always()}). Stanowi odpowiednik \texttt{stop-infra} dla ścieżki, gdy model się poprawił. Istnieje jako osobny job, ponieważ \texttt{deploy} korzysta z runnera na EC2 --- instancja musi pozostać uruchomiona do końca wdrożenia i może zostać zatrzymana dopiero po jego zakończeniu.
+
+\paragraph{Job 7: create-pr}\mbox{}\\
+Uruchamia się równolegle z jobem \texttt{deploy}, jeśli model spełnił kryteria bramki jakości. Tworzy pull request z gałęzi danych do \texttt{main} z automatycznie generowanym opisem zawierającym zestawienie metryk: wartości \texttt{val\_dice} i \texttt{val\_iou} nowego modelu oraz poprzedniego baseline, a także link do uruchomienia MLflow. Pull request scala zaktualizowane manifesty DVC (\texttt{images.dvc}, \texttt{masks.dvc}) z gałęzią główną, trwale łącząc wersję kodu z wersją danych.
+
+\paragraph{Job 8: auto-merge}\mbox{}\\
+Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr merge --auto}). Scalenie następuje natychmiast po pozytywnym przejściu statusowych sprawdzeń wymaganych przez reguły ochrony gałęzi. W efekcie, jeśli model się poprawił, cały cykl --- od wypchnięcia danych do scalenia z \texttt{main} --- odbywa się bez żadnej ręcznej interwencji.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{img/05_pipline_ci_cd/successfull_training.png}
+    \caption{Udany przebieg pipeline CI/CD z automatycznym wdrożeniem nowej wersji modelu.}
+    \label{fig:workflow-success}
+\end{figure}
+
+\subsection{Współbieżność i kolejkowanie}
+
+Workflow skonfigurowany jest z kluczem \texttt{concurrency.cancel-in-progress: false}. Oznacza to, że jeśli użytkownik wypchnął dane kilkakrotnie zanim poprzednie uruchomienie zdążyło się zakończyć, kolejne uruchomienia nie są anulowane --- trafiają do kolejki i wykonują się po zakończeniu poprzednich. Podejście to chroni przed sytuacją, w której późniejszy push nadpisze wyniki wcześniejszego treningu, zanim zostanie on oceniony przez bramkę jakości.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{img/05_pipline_ci_cd/concurrency.png}
+    \caption{Kolejkowanie uruchomień workflow w GitHub Actions --- nowe uruchomienie czeka na zakończenie poprzedniego.}
+    \label{fig:workflow-concurrency}
+\end{figure}
 
 \subsection{Bramka jakości}
 
-Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacja jest w skrypcie \texttt{quality\_gate.py} i korzysta z API MLflow \cite{zaharia2018mlflow}.
+Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacja jest w skrypcie \texttt{quality\_gate.py} i korzysta z API MLflow Model Registry \cite{mlflow_model_registry}.
 
 \paragraph{Pobieranie baseline}\mbox{}\\
 Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
@@ -108,18 +143,10 @@ Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w 
 
 \subsection{Automatyczne wdrożenie}
 
-Po scaleniu pull requesta z \texttt{main} uruchamiany jest workflow budujący i wdrażający nowy obraz Docker.
+Gdy bramka jakości potwierdzi poprawę modelu, job \texttt{deploy} w tym samym workflow buduje i wdraża nowy obraz Docker na klastrze k3s --- równolegle z tworzeniem pull requesta (job \texttt{create-pr}).
 
 \paragraph{Budowanie obrazu}\mbox{}\\
-Obraz jest budowany na podstawie pliku \texttt{docker/Dockerfile.serve}. Używa warstwy bazowej z PyTorch CPU, kopiuje kod API i instaluje zależności z \texttt{requirements.txt}. Po zbudowaniu obraz jest tagowany numerem wersji i hashiem commita, a następnie wysyłany do Amazon ECR:
-
-\begin{verbatim}
-docker build -f docker/Dockerfile.serve -t model-api .
-docker tag model-api:latest $ECR_REGISTRY/model-api:$VERSION
-docker push $ECR_REGISTRY/model-api:$VERSION
-\end{verbatim}
+Obraz jest budowany na podstawie pliku \texttt{docker/Dockerfile.serve}. Używa warstwy bazowej z PyTorch CPU, kopiuje kod API i instaluje zależności z \texttt{requirements.txt}. Po zbudowaniu obraz jest tagowany numerem wersji i hashiem commita, a następnie wysyłany do Amazon ECR.
 
 \paragraph{Wdrożenie Helm}\mbox{}\\
 Helm \cite{helm_docs} aktualizuje deployment na klastrze k3s \cite{k3s_docs} nową wersją obrazu. Konfiguracja wdrożenia zdefiniowana jest w \texttt{infrastructure/helm-values.yaml}. Po wdrożeniu automatycznie wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
-
-% [UZUPEŁNIĆ: screenshot workflow zakończonego sukcesem w GitHub Actions]

@@ -1,98 +1,177 @@
 \section{Architektura Systemu}
 \label{sec:Architektura_systemu}
 
-\subsection{Przegląd architektury}
+Niniejszy rozdział opisuje zaprojektowaną architekturę systemu: jakie komponenty zostały wybrane, jak zostały ze sobą połączone i jakimi przesłankami kierowano się przy podejmowaniu kluczowych decyzji projektowych. Opis wdrożenia i szczegółów implementacji poszczególnych elementów zawarty jest w kolejnych rozdziałach.
 
-System został zaprojektowany jako zautomatyzowany pipeline CI/CD dla modeli uczenia maszynowego. Obejmuje cały cykl życia modelu: od dodania danych treningowych, przez walidację danych i trening, aż po wybór najlepszego modelu i wdrożenie.
+\subsection{Cele i ograniczenia projektowe}
 
-Architektura opiera się na trzech głównych obszarach:
+Projektując system, kierowano się czterema głównymi celami:
+
+\begin{enumerate}
+  \item \textbf{Pełna automatyzacja} --- dodanie nowych danych treningowych powinno wymagać wyłącznie wykonania polecenia \texttt{git push}; wszystkie dalsze kroki (walidacja, trening, ocena jakości, wdrożenie) powinny odbywać się bez udziału użytkownika.
+  \item \textbf{Reprodukowalność} --- każda wersja modelu musi być jednoznacznie powiązana z wersją kodu, wersją danych treningowych i zapisanymi metrykami.
+  \item \textbf{Kontrola kosztów} --- projekt realizowany jest w ramach akademickiego konta AWS z budżetem około 50~USD; zasoby obliczeniowe uruchamiane są tylko wtedy, gdy są faktycznie potrzebne.
+  \item \textbf{Kontrola czasu} --- Labolatorium AWS może być uruchomione maksymalnie 4 godziny ciągiem, a trening modelu nie powinien przekraczać 2,5 godziny,aby umożliwić wykonanie pełnego cyklu CI/CD w ramach jednego uruchomienia.
+  \item \textbf{Porównywalność} --- system musi umożliwiać zebranie mierzalnych danych (czas, koszt, liczba kroków manualnych) do porównania podejścia automatycznego z manualnym.
+\end{enumerate}
+
+Ograniczenia budżetowe miały bezpośredni wpływ na wybór technologii. Wykluczone zostały usługi zarządzane o wysokim koszcie stałym: Amazon EKS (zarządzany Kubernetes ~\$150/mies.), Amazon RDS (zarządzana baza danych), NAT Gateway (~\$32/mies.) oraz Application Load Balancer (~\$18/mies.). W ich miejsce zastosowano tańsze odpowiedniki: k3s na pojedynczej instancji EC2 zamiast EKS, SQLite jako backend MLflow zamiast RDS, oraz dostęp przez publiczny adres IP z NodePort zamiast load balancera. Szacowany koszt systemu przy typowym obciążeniu deweloperskim (kilka uruchomień tygodniowo) wynosi około 11~USD miesięcznie zakładając lekki ruch.
+
+\subsection{Struktura repozytoriów}
+
+Projekt korzysta z dwóch repozytoriów Git połączonych mechanizmem submodułów:
+
 \begin{itemize}
-  \item kontrola wersji kodu i danych,
-  \item uruchamianie zadań i wdrożeń w kontenerach,
-  \item rejestrowanie eksperymentów oraz wersji modeli.
+  \item \textbf{Water-Meters-Segmentation-Autimatization} --- repozytorium główne, zawiera kod ML, metadane danych treningowych śledzone przez DVC, workflow GitHub Actions, konfigurację Docker i Helm oraz skrypty pomocnicze. Całość procesu CI/CD wyzwalana jest w tym repozytorium.
+  \item \textbf{DevOps-AI-Model-Automatization} --- repozytorium infrastruktury, dołączone jako submoduł pod ścieżką \texttt{devops/}; zawiera moduły Terraform, skrypty konfiguracyjne EC2 oraz niniejszą pracę dyplomową.
 \end{itemize}
 
-Punktem centralnym jest repozytorium Git. To w nim przechowywany jest kod, konfiguracja oraz metadane danych. Każdy push lub merge może uruchomić automatyczne procesy w GitHub Actions \cite{github_actions_docs}. Dzięki temu użytkownik nie musi ręcznie wykonywać większości kroków operacyjnych.
-
-Część obliczeniowa działa w chmurze AWS. Zasoby są uruchamiane tylko wtedy, gdy są potrzebne, na przykład na czas treningu lub pobrania modelu. Po zakończeniu pracy instancja jest zatrzymywana, aby ograniczyć koszty. Szczegółowe uzasadnienie takich decyzji znajduje się we wprowadzeniu w sekcji \ref{sec:Wprowadzenie}.
-
-W projekcie wykorzystano model U-Net do segmentacji semantycznej obrazów wodomierzy. Metryki Dice oraz IoU są używane w bramce jakości, która decyduje, czy nowa wersja modelu może zostać uznana za lepszą od obecnej.
-
-\subsection{Komponenty systemu}
-
-\subsubsection{Warstwa kontroli wersji}
-
-Git odpowiada za wersjonowanie kodu, konfiguracji oraz metadanych związanych z danymi treningowymi. Repozytorium można podzielić na trzy logiczne części.
-
-\paragraph{Kod modelu i skrypty treningowe}\mbox{}\\
-Ta część zawiera implementację modelu U-Net w PyTorch oraz skrypty odpowiedzialne za przygotowanie danych, trening i walidację. Ponieważ kod jest wersjonowany, można odtworzyć, w jakich warunkach trenowano konkretną wersję modelu.
-
-\paragraph{Dane treningowe}\mbox{}\\
-Domyślną metodą zarządzania danymi treningowymi w systemie jest DVC \cite{dvc_docs}. Repozytorium Git przechowuje wtedy jedynie metadane i pliki śledzące (na przykład \texttt{.dvc} oraz \texttt{dvc.lock}), natomiast właściwe obrazy i maski znajdują się w Amazon S3. Takie podejście skaluje się znacznie lepiej niż trzymanie dużych plików w Git i pozwala na wersjonowanie danych w sposób spójny z wersjonowaniem kodu.
-
-W wariancie proof of concept dopuszczono również możliwość przechowywania małych zbiorów danych bezpośrednio w repozytorium, aby uprościć szybkie testy. Należy jednak zaznaczyć, że użycie DVC wiąże się z dodatkowym krokiem \texttt{dvc pull}, który w praktyce może zauważalnie wydłużyć czas działania pipeline, szczególnie przy większych zbiorach danych.
-
-\paragraph{Infrastruktura jako kod}\mbox{}\\
-Definicja infrastruktury jest utrzymywana w kodzie, głównie jako moduły Terraform \cite{hashicorp_terraform} oraz konfiguracje Helm \cite{helm_docs}. Dzięki temu środowisko można odtworzyć w sposób powtarzalny, a zmiany infrastruktury są widoczne w historii repozytorium.
-
-\subsubsection{Warstwa uruchamiania procesów}
-
-\paragraph{GitHub Actions}\mbox{}\\
-GitHub Actions pełni rolę głównego mechanizmu uruchamiania procesów CI/CD. W projekcie wykorzystano kilka workflow, z których najważniejsze realizują następujące zadania:
-\begin{itemize}
-  \item walidacja danych treningowych,
-  \item uruchomienie treningu modelu i zebranie wyników,
-  \item uruchamianie i zatrzymywanie instancji EC2,
-  \item testy jakości kodu i testy jednostkowe,
-  \item obsługa procesu dodania danych i utworzenia pull requesta.
-\end{itemize}
-
-\paragraph{Instancja EC2 i k3s}\mbox{}\\
-Zamiast zarządzanego klastra Kubernetes zastosowano k3s \cite{k3s_docs} uruchomiony na pojedynczej instancji EC2. To podejście jest wystarczające dla projektu proof of concept i pozwala znacząco ograniczyć koszty. Na instancji działa klaster k3s oraz usługi potrzebne do treningu i wdrożeń.
-
-\paragraph{MLflow}\mbox{}\\
-MLflow \cite{zaharia2018mlflow} odpowiada za dwie rzeczy. Po pierwsze zapisuje przebieg eksperymentów, czyli metryki, parametry oraz artefakty treningu. Po drugie przechowuje wersje modeli i ich status, na przykład Production lub Archived. W tym projekcie metadane są przechowywane w bazie lokalnej na instancji EC2, a artefakty trafiają do S3.
-
-\subsubsection{Warstwa przechowywania danych}
-
-\paragraph{Amazon S3}\mbox{}\\
-S3 jest używane jako trwałe miejsce przechowywania. W systemie trafiają tam głównie artefakty z MLflow, takie jak wagi modeli i logi. Opcjonalnie S3 może też być wykorzystywane do przechowywania danych treningowych, jeśli używany jest DVC.
-
-\paragraph{Amazon ECR}\mbox{}\\
-ECR służy jako rejestr obrazów Docker. Po zaakceptowaniu modelu przez bramkę jakości obraz kontenera jest budowany i wysyłany do ECR, a następnie wdrażany na klaster k3s.
-
-Warto zaznaczyć, że jeśli dane są przechowywane w DVC, etap przygotowania środowiska obejmuje dodatkowe pobranie danych z S3, co jest jednym z głównych źródeł wydłużenia czasu całego workflow treningowego.
-
-\subsubsection{Warstwa monitorowania}
-
-System zawiera komponenty monitoringu oparte na Prometheus \cite{prometheus_docs} oraz Grafana. Prometheus zbiera metryki z endpointu \texttt{/metrics} udostępnionego przez API modelu, a Grafana prezentuje je w postaci dashboardów. Szczegóły konfiguracji stosu monitorowania opisane są w rozdziale \ref{sec:Implementacja_wdrozenia}.
-
-\subsection{Diagram architektury}
+Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieniają się często i wyzwalają automatyczne procesy, natomiast definicja infrastruktury zmienia się rzadko i jest zarządzana ręcznie. Dzięki mechanizmowi submodułów konkretna wersja infrastruktury jest powiązana z konkretną wersją kodu aplikacji, co zachowuje pełną reprodukowalność środowiska.
 
 \begin{figure}[H]
 \centering
-\IfFileExists{img/03_architektura_systemu/architecture-overview.png}{%
-  \includegraphics[width=\textwidth]{img/03_architektura_systemu/architecture-overview.png}%
+\begin{tikzpicture}[
+  repo/.style={
+    draw, rounded corners=4pt,
+    minimum width=8.2cm, text width=8cm,
+    align=left, inner sep=8pt,
+    font=\small\ttfamily
+  },
+  repolabel/.style={
+    font=\footnotesize\sffamily\bfseries,
+    fill=white, inner sep=2pt
+  },
+  arrow/.style={-{Stealth[length=7pt]}, thick},
+  dasharrow/.style={-{Stealth[length=7pt]}, thick, dashed, gray}
+]
+
+% --- Repozytorium główne ---
+\node[repo, fill=blue!6] (main) {
+  \textbf{Water-Meters-Segmentation-Autimatization} \quad {\normalfont\small\sffamily\textit{(repozytorium główne)}}\\[4pt]
+  \textbullet\ WMS/\ \ --- kod ML, skrypty treningowe\\
+  \textbullet\ .github/workflows/\ \ --- pipeline CI/CD\\
+  \textbullet\ docker/,\ helm/\ \ --- konteneryzacja\\
+  \textbullet\ WMS/data/training/\ \ --- dane (DVC)\\[2pt]
+  \textbullet\ \textbf{devops/}\ \ \textit{$\leftarrow$ submoduł Git}
+};
+
+% --- Repozytorium infrastruktury (submoduł) ---
+\node[repo, fill=orange!8, below=1.6cm of main] (infra) {
+  \textbf{DevOps-AI-Model-Automatization} \quad {\normalfont\small\sffamily\textit{(submoduł)}}\\[4pt]
+  \textbullet\ terraform/\ \ --- infrastruktura AWS\\
+  \textbullet\ helm/ml-model/\ \ --- chart Kubernetes\\
+  \textbullet\ scripts/\ \ --- skrypty automatyzacji\\
+  \textbullet\ Thesis/\ \ --- niniejsza praca dyplomowa
+};
+
+% --- Repozytorium referencyjne ---
+\node[repo, fill=gray!8, below=1.6cm of infra] (ref) {
+  \textbf{Water-Meters-Segmentation} \quad {\normalfont\small\sffamily\textit{(referencja, tylko do odczytu)}}\\[4pt]
+  \textbullet\ Oryginalny model U-Net (punkt wyjścia)\\
+  \textbullet\ Metryki bazowe: Dice 0{,}9275,\ IoU 0{,}8865
+};
+
+% --- Strzałki ---
+\draw[arrow] (main.south) -- node[right, font=\footnotesize\sffamily, xshift=4pt]
+  {\texttt{git submodule}} (infra.north);
+
+\draw[dasharrow] ([xshift=-1cm]infra.south) -- node[right, font=\footnotesize\sffamily, xshift=4pt]
+  {orginalne repozytorium z modelem} ([xshift=-1cm]ref.north);
+
+\end{tikzpicture}
+\caption{Struktura repozytoriów projektu: repozytorium główne zawiera infrastrukturę jako submoduł Git; repozytorium referencyjne dostarcza oryginalny model i metryki bazowe}
+\label{fig:repo-structure}
+\end{figure}
+
+
+\subsection{Warstwy architektury}
+
+System zorganizowany jest w cztery logiczne warstwy, które razem tworzą kompletny pipeline MLOps. Rysunek~\ref{fig:architecture-overview} przedstawia ich wzajemne powiązania.
+
+\begin{figure}[H]
+\centering
+\IfFileExists{img/03_architektura_systemu/C4.pdf}{%
+  \includegraphics[width=\textwidth]{img/03_architektura_systemu/C4.pdf}%
 }{%
-  \fbox{\parbox{0.9\textwidth}{\centering\vspace{1cm}\textit{[Do uzupełnienia: diagram C4 architecture-overview.png]}\vspace{1cm}}}%
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{1.5cm}%
+    \textit{[Diagram C4: główne komponenty systemu i ich interakcje]}%
+  \vspace{1.5cm}}}%
 }
-\caption{Diagram kontekstowy C4 przedstawiający główne komponenty systemu oraz ich interakcje}
+\caption{Architektura systemu --- cztery warstwy i ich komponenty}
 \label{fig:architecture-overview}
 \end{figure}
 
-Rysunek \ref{fig:architecture-overview} przedstawia kontekst systemu w notacji C4. Użytkownik pracuje z repozytorium Git, a automatyzacja realizowana jest przez GitHub Actions. Workflow zarządzają zasobami AWS, uruchamiają instancję EC2 i wykonują zadania treningowe oraz wdrożeniowe. Na EC2 działa klaster k3s, w którym uruchomione są MLflow, API modelu oraz narzędzia monitoringu. Artefakty modelu są przechowywane w S3, a obrazy kontenerów w ECR.
+% TODO: Diagram C4 wstawić jako C4.pdf (lub C4.png) do img/03_architektura_systemu/
+% Diagram powinien pokazywać 4 warstwy (bloki poziome lub pionowe):
+%   1. Kontrola wersji: Git/GitHub, DVC -> S3 (dane), Terraform/Helm (IaC)
+%   2. Automatyzacja: GitHub Actions (workflow), hook pre-push
+%   3. Infrastruktura AWS: EC2 (Elastic IP), S3 (DVC + MLflow), ECR
+%   4. Aplikacja: k3s, MLflow Server, API modelu (FastAPI), Prometheus+Grafana
+% Ze strzałkami między warstwami: git push -> Actions -> EC2 -> S3/ECR -> k3s
 
-\subsection{Przepływ danych w systemie}
+\subsubsection{Warstwa kontroli wersji}
 
-\begin{figure}[H]
+Git i GitHub są centralnym punktem całego systemu --- każda zmiana, czy to w kodzie, danych czy infrastrukturze, przechodzi przez repozytorium. Repozytorium przechowuje kod ML, definicje pipeline'u i infrastruktury, natomiast same pliki binarne danych treningowych przechowywane są w S3 i śledzone przez DVC. Mechanizm \texttt{pre-push hook} automatycznie kieruje nowe dane treningowe na oddzielną gałąź, inicjując cały dalszy proces. Szczegóły działania hooka opisano w rozdziale~\ref{sec:Pipeline_CICD}.
+
+\subsubsection{Warstwa automatyzacji}
+
+GitHub Actions orkiestruje cały cykl życia modelu. Reaguje na pojawienie się nowej gałęzi danych i sekwencyjnie wywołuje: walidację danych, start infrastruktury, trening, bramkę jakości, wdrożenie (jeśli model poprawił się) oraz sprzątanie. Workflow korzysta z reużywalnych składników dla operacji na EC2, co eliminuje powielanie konfiguracji. Szczegółowy opis pipeline'u zawarty jest w rozdziale~\ref{sec:Pipeline_CICD}.
+
+\subsubsection{Warstwa infrastruktury chmurowej}
+
+Cała infrastruktura AWS zdefiniowana jest jako kod w Terraform i tworzona powtarzalnie jednym poleceniem. Kluczowe zasoby to: instancja EC2 ze statycznym Elastic IP (niezbędnym przy cyklicznym stop/start), dwa zasobniki S3 (dane DVC i artefakty MLflow) oraz rejestr obrazów ECR. Instancja EC2 pełni podwójną rolę --- runner treningu podczas pipeline'u i węzeł klastra k3s podczas serwowania modelu. Konfigurację infrastruktury opisuje rozdział~\ref{sec:Wdrozenie_systemu}.
+
+\subsubsection{Warstwa aplikacji i monitoringu}
+
+Na instancji EC2 działa klaster k3s z wdrożonym API modelu (FastAPI, zarządzany przez Helm), serwerem MLflow (systemd) oraz opcjonalnym stosem monitoringu Prometheus~+~Grafana. Model pobierany jest z rejestru MLflow przy starcie kontenera, co oddziela obraz Docker od konkretnej wersji modelu. Szczegóły konfiguracji wdrożenia opisuje rozdział~\ref{sec:Wdrozenie_systemu}.
+
+\subsection{Kluczowe decyzje projektowe}
+
+Tabela~\ref{tab:decisions} zestawia najważniejsze decyzje projektowe podjęte podczas budowy systemu, wraz z uzasadnieniem wyboru i odrzuconą alternatywą. Każda z nich wynika z jednego lub więcej celów wymienionych w sekcji~\ref{sec:Architektura_systemu}.
+
+\begin{table}[H]
 \centering
-\IfFileExists{img/03_architektura_systemu/data-flow.png}{%
-  \includegraphics[scale=0.09]{img/03_architektura_systemu/data-flow.png}%
-}{%
-  \fbox{\parbox{0.9\textwidth}{\centering\vspace{1cm}\textit{[Do uzupełnienia: diagram przepływu danych data-flow.png]}\vspace{1cm}}}%
-}
-\caption{Diagram przepływu danych treningowych przez system}
-\label{fig:data-flow}
-\end{figure}
-
-Rysunek \ref{fig:data-flow} pokazuje drogę danych od lokalnego repozytorium do artefaktów produkcyjnych. Dane są wersjonowane przez DVC, a następnie pobierane przez runner GitHub Actions. Skrypty przygotowują podział danych, trening generuje wagi modelu, a wynik jest rejestrowany w MLflow. Model Production może zostać pobrany lokalnie i użyty do predykcji.
+\caption{Kluczowe decyzje architektoniczne}
+\label{tab:decisions}
+\begin{tabular}{p{3.5cm}p{3.8cm}p{4.2cm}}
+\toprule
+\textbf{Decyzja} & \textbf{Wybór} & \textbf{Uzasadnienie} \\
+\midrule
+Orchestracja kontenerów
+  & k3s na EC2
+  & EKS jest ~15$\times$ droższy; k3s wystarcza dla jednego węzła \\
+\addlinespace
+Backend MLflow
+  & SQLite
+  & RDS ~\$30/mies.; SQLite jest wystarczający dla małego projektu; dane Meta przechowywane na EC2 \\
+\addlinespace
+Dostęp do API
+  & NodePort 30080
+  & Load Balancer ~\$18/mies.; publiczny adres IP EC2 z Elastic IP jest wystarczający \\
+\addlinespace
+Tytuł instancji EC2
+  & t3.large (8~GB RAM)
+  & t3.small/medium: crash OOM przy pobieraniu obrazu PyTorch 8,69~GB; t3.large jest minimum \\
+\addlinespace
+Stop/start EC2
+  & Automatyczny po każdym pipeline
+  & EC2 działa tylko ~3--4~h na uruchomienie; oszczędność ~80\% kosztów vs. ciągłe działanie \\
+\addlinespace
+Dane treningowe w Git
+  & Tylko metadane DVC
+  & Duże pliki binarne spowalniają Git i przekraczają limity; S3 jest tańszy i skalowalny \\
+\addlinespace
+Trening przed PR
+  & Trening $\rightarrow$ PR (jeśli lepszy)
+  & PR tworzony przez bota nie wyzwala innych workflow (ograniczenie GitHub); kolejność eliminuje problem \\
+\addlinespace
+Baseline bramki jakości
+  & Dynamiczny z MLflow
+  & Hardkodowany baseline staje się nieaktualny po każdym treningu; MLflow zawsze zna aktualny Production \\
+\addlinespace
+IAM dla GitHub Actions
+  & Tymczasowe klucze sesji
+  & AWS Academy zabrania tworzenia ról IAM; OIDC niedostępne; klucze rotowane ręcznie \\
+\bottomrule
+\end{tabular}
+\end{table}
