@@ -86,7 +86,7 @@ Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieni
 
 \subsection{Warstwy architektury}
 
-System zorganizowany jest w cztery logiczne warstwy, które razem tworzą kompletny pipeline MLOps. Rysunek~\ref{fig:architecture-overview} przedstawia ich wzajemne powiązania.
+System zorganizowany jest w cztery logiczne warstwy odpowiadające granicom widocznym na diagramie C4 (rysunek~\ref{fig:architecture-overview}): warstwa użytkownika, warstwa kontroli wersji i automatyzacji, warstwa infrastruktury chmurowej oraz warstwa platformy ML i serwowania.
 
 \begin{figure}[H]
 \centering
@@ -97,33 +97,27 @@ System zorganizowany jest w cztery logiczne warstwy, które razem tworzą komple
     \textit{[Diagram C4: główne komponenty systemu i ich interakcje]}%
   \vspace{1.5cm}}}%
 }
-\caption{Architektura systemu --- cztery warstwy i ich komponenty}
+\caption{Architektura systemu w modelu C4 --- cztery warstwy i ich komponenty}
 \label{fig:architecture-overview}
 \end{figure}
 
-% TODO: Diagram C4 wstawić jako C4.pdf (lub C4.png) do img/03_architektura_systemu/
-% Diagram powinien pokazywać 4 warstwy (bloki poziome lub pionowe):
-%   1. Kontrola wersji: Git/GitHub, DVC -> S3 (dane), Terraform/Helm (IaC)
-%   2. Automatyzacja: GitHub Actions (workflow), hook pre-push
-%   3. Infrastruktura AWS: EC2 (Elastic IP), S3 (DVC + MLflow), ECR
-%   4. Aplikacja: k3s, MLflow Server, API modelu (FastAPI), Prometheus+Grafana
-% Ze strzałkami między warstwami: git push -> Actions -> EC2 -> S3/ECR -> k3s
+\subsubsection{Warstwa użytkownika}
 
-\subsubsection{Warstwa kontroli wersji}
+Punkt wejścia do systemu stanowi maszyna lokalna użytkownika (Data Scientist). Interakcja z całym pipeline'em sprowadza się do dwóch operacji: \texttt{git commit} i \texttt{git push} przy dodawaniu nowych danych treningowych oraz uruchomienia skryptu \texttt{predicts.py} przy lokalnym wykonywaniu predykcji na nowych obrazach. Zainstalowany hook Git \texttt{pre-push} \cite{chacon2014pro_git} automatycznie przechwytuje push zawierający dane treningowe i kieruje go na oddzielną gałąź \texttt{data/TIMESTAMP}, inicjując dalszy pipeline bez konieczności jakiejkolwiek dodatkowej akcji ze strony użytkownika.
 
-Git i GitHub są centralnym punktem całego systemu --- każda zmiana, czy to w kodzie, danych czy infrastrukturze, przechodzi przez repozytorium. Repozytorium przechowuje kod ML, definicje pipeline'u i infrastruktury, natomiast same pliki binarne danych treningowych przechowywane są w S3 i śledzone przez DVC. Mechanizm \texttt{pre-push hook} automatycznie kieruje nowe dane treningowe na oddzielną gałąź, inicjując cały dalszy proces. Szczegóły działania hooka opisano w rozdziale~\ref{sec:Pipeline_CICD}.
+\subsubsection{Warstwa kontroli wersji i automatyzacji}
 
-\subsubsection{Warstwa automatyzacji}
+Centralnym punktem systemu jest platforma GitHub łącząca kontrolę wersji kodu z automatyzacją pipeline'u. Repozytorium Git \cite{chacon2014pro_git} przechowuje kod ML, definicje workflow i konfigurację wdrożenia (Helm charts), natomiast binarne pliki danych treningowych przechowywane są w Amazon S3 i śledzone przez DVC \cite{dvc_docs} --- w repozytorium zapisywane są wyłącznie lekkie pliki metadanych (\texttt{.dvc}) zawierające hasze i rozmiary plików, co pozwala wersjonować duże zbiory danych bez obciążania historii Git.
 
-GitHub Actions orkiestruje cały cykl życia modelu. Reaguje na pojawienie się nowej gałęzi danych i sekwencyjnie wywołuje: walidację danych, start infrastruktury, trening, bramkę jakości, wdrożenie (jeśli model poprawił się) oraz sprzątanie. Workflow korzysta z reużywalnych składników dla operacji na EC2, co eliminuje powielanie konfiguracji. Szczegółowy opis pipeline'u zawarty jest w rozdziale~\ref{sec:Pipeline_CICD}.
+GitHub Actions \cite{github_actions_docs} orkiestruje cały cykl życia modelu: wykrywa pojawienie się gałęzi danych, pobiera historyczny zbiór z S3, scala go z nowo dostarczonymi plikami, uruchamia walidację, startuje infrastrukturę obliczeniową, trenuje model, ocenia go przez bramkę jakości i --- jeśli model się poprawił --- wdraża go i scala gałąź danych z \texttt{main}. Workflow korzysta z reużywalnych podworkflow dla operacji na EC2, co eliminuje powielanie konfiguracji.
 
 \subsubsection{Warstwa infrastruktury chmurowej}
 
-Cała infrastruktura AWS zdefiniowana jest jako kod w Terraform i tworzona powtarzalnie jednym poleceniem. Kluczowe zasoby to: instancja EC2 ze statycznym Elastic IP (niezbędnym przy cyklicznym stop/start), dwa zasobniki S3 (dane DVC i artefakty MLflow) oraz rejestr obrazów ECR. Instancja EC2 pełni podwójną rolę --- runner treningu podczas pipeline'u i węzeł klastra k3s podczas serwowania modelu. Konfigurację infrastruktury opisuje rozdział~\ref{sec:Wdrozenie_systemu}.
+Zasoby AWS tworzone są deklaratywnie za pomocą Terraform \cite{hashicorp_terraform} i mogą być odtworzone jednym poleceniem \texttt{terraform apply}. Kluczowe zasoby to: instancja EC2 \texttt{t3.large} (8~GB RAM) ze statycznym Elastic IP, dwa zasobniki S3 (dane DVC i artefakty MLflow) oraz rejestr obrazów Docker Amazon ECR. Instancja EC2 pełni podwójną rolę: self-hosted runner GitHub Actions podczas treningu modelu i węzeł klastra k3s \cite{k3s_docs} podczas serwowania predykcji. Elastic IP jest niezbędne przy cyklicznym stop/start --- bez niego publiczny adres IP instancji zmieniałby się po każdym starcie, uniemożliwiając stabilną konfigurację runnera i MLflow.
 
-\subsubsection{Warstwa aplikacji i monitoringu}
+\subsubsection{Warstwa platformy ML i serwowania}
 
-Na instancji EC2 działa klaster k3s z wdrożonym API modelu (FastAPI, zarządzany przez Helm), serwerem MLflow (systemd) oraz opcjonalnym stosem monitoringu Prometheus~+~Grafana. Model pobierany jest z rejestru MLflow przy starcie kontenera, co oddziela obraz Docker od konkretnej wersji modelu. Szczegóły konfiguracji wdrożenia opisuje rozdział~\ref{sec:Wdrozenie_systemu}.
+Na klastrze k3s \cite{k3s_docs} uruchomionym na instancji EC2 działają cztery komponenty. MLflow pełni rolę centralnego rejestru eksperymentów i modeli --- każde uruchomienie treningu loguje parametry, metryki i artefakty, a model w stadium Production stanowi punkt odniesienia dla bramki jakości \cite{mlflow_model_registry}. API modelu zbudowane na FastAPI i zarządzane przez Helm \cite{helm_docs} udostępnia endpoint \texttt{/predict} przyjmujący obrazy i zwracający maski segmentacyjne; model pobierany jest z rejestru MLflow przy starcie kontenera, co oddziela wersję obrazu Docker od wersji modelu. Konteneryzacja przez Docker \cite{merkel2014docker} zapewnia identyczne środowisko uruchomieniowe niezależnie od hosta. Stos monitoringu Prometheus \cite{prometheus_docs}~+~Grafana zbiera metryki działania API (liczba predykcji, czasy odpowiedzi, błędy) i prezentuje je na dashboardzie dostępnym przez NodePort.
 
 \subsection{Kluczowe decyzje projektowe}
 
