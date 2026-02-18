@@ -168,3 +168,9 @@ Model jest uznany za ulepszony, jeśli obie metryki walidacyjne są wyższe od b
 
 Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w MLflow i archiwizuje poprzednią wersję. Wynik jest przekazywany jako output do GitHub Actions (\texttt{echo "improved=true" >> \$GITHUB\_OUTPUT}).
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{img/05_pipline_ci_cd/not_improved_model_example.png}
+    \caption{Przykład z nieudanego przebiegu pipeline CI/CD --- model nie spełnia kryteriów bramki jakości.}
+    \label{fig:workflow-not-improved}
+\end{figure}
