@@ -270,7 +270,7 @@ helm upgrade --install wms-model devops/helm/ml-model/ \
 kubectl describe node
 
 # If out of memory/CPU, reduce resource requests in helm-values.yaml
-# Or upgrade EC2 instance type (t3.small → t3.medium)
+# Check resource requests in helm-values.yaml
 ```
 
 ---

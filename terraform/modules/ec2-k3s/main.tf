@@ -1,4 +1,4 @@
-# EC2 + k3s Module - Single t3.small instance with k3s, Docker, MLflow
+# EC2 + k3s Module - Single t3.large instance with k3s, Docker, MLflow
 
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true

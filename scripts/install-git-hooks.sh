@@ -111,7 +111,7 @@ Timestamp: $TIMESTAMP"
       echo ""
       echo " Below error is NORMAL and should be ignored: ❌"
       echo ""
-      echo "error: failed to push some refs to 'https://github.com/Rafallost/Water-Meters-Segmentation-Autimatization.git'"
+      echo "error: failed to push some refs to 'https://github.com/Rafallost/Water-Meters-Segmentation-Automatization.git'"
       echo ""
       git checkout "$CURRENT_BRANCH"
       exit 1  # Block push to main

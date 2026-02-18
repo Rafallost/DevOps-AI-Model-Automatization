@@ -21,7 +21,7 @@ service:
   nodePort: 30080  # Fixed port for predictable access
 
 resources:
-  # Resource limits appropriate for t3.small (2GB RAM, 2 vCPU)
+  # Resource limits appropriate for t3.large (8GB RAM, 2 vCPU)
   # Leave headroom for k3s, MLflow, and other pods
   limits:
     memory: "512Mi"
