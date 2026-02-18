@@ -63,13 +63,13 @@ cd terraform && terraform init
 terraform plan
 
 # Lub najlepiej wskazać ścieżkę ręcznie
-terraform plan -var-file=D:\...\Water-Meters-Segmentation-Autimatization\devops\terraform\terraform.tfvars
+terraform plan -var-file=D:\...\Water-Meters-Segmentation-Automatization\devops\terraform\terraform.tfvars
 
 # Tworzenie infrastruktury
 terraform apply   # lub użyj scripts/deploy-to-cloud.sh
 
 # Lub najlepiej wskazać ścieżkę ręcznie
-terraform apply -var-file=D:\...\Water-Meters-Segmentation-Autimatization\devops\terraform\terraform.tfvars -auto-approve
+terraform apply -var-file=D:\...\Water-Meters-Segmentation-Automatization\devops\terraform\terraform.tfvars -auto-approve
 
 # Niszczenie (pamiętaj o opróżnieniu S3 najpierw)
 terraform destroy   # lub użyj scripts/cleanup-aws.sh

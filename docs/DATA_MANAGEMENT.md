@@ -5,6 +5,7 @@
 This project uses **DVC (Data Version Control)** with **S3 backend** to manage training data. Raw images and masks are stored in S3, while Git tracks only lightweight `.dvc` metadata files.
 
 **Key Benefits:**
+
 - Git repository stays small (no large binary files)
 - Data versioned alongside code
 - Automatic upload/download to/from S3
@@ -30,7 +31,7 @@ To download the current training data to your local machine:
 
 ```bash
 # Pull all training data
-cd Water-Meters-Segmentation-Autimatization
+cd Water-Meters-Segmentation-Automatization
 dvc pull WMS/data/training/images.dvc WMS/data/training/masks.dvc
 
 # Data is now available in:
@@ -39,6 +40,7 @@ dvc pull WMS/data/training/images.dvc WMS/data/training/masks.dvc
 ```
 
 **View images:**
+
 ```bash
 ls -lh WMS/data/training/images/
 ls -lh WMS/data/training/masks/
@@ -89,6 +91,7 @@ echo "Masks:  $(ls WMS/data/training/masks/ | wc -l)"
 ```
 
 **Requirements:**
+
 - Images: `.jpg`, `.jpeg`, or `.png` format
 - Masks: `.png` format (binary: 0 or 255 pixel values)
 - Resolution: 512×512 pixels
@@ -122,6 +125,7 @@ git push origin main
 8. **Blocks push to main** (by design)
 
 **Expected output:**
+
 ```
 🔍 Checking for training data changes...
 
@@ -184,6 +188,7 @@ On the `data/YYYYMMDD-HHMMSS` branch, GitHub Actions automatically:
 #### Step 5: Review and Merge (Manual)
 
 Once the PR is auto-approved:
+
 - Review training metrics in PR comments
 - Verify quality gate passed
 - **Merge the PR** to deploy the new model
@@ -247,12 +252,14 @@ git push origin data/my-experiment
 **Answer:** DVC uses **content-addressed storage** (MD5 hashing). Files are identified by content, not name.
 
 **Example:**
+
 ```bash
 # User A uploads id_25.jpg (cat photo, MD5: abc123)
 # User B uploads id_25.jpg (dog photo, MD5: def456)
 ```
 
 **Result:**
+
 - Both files stored in S3 with different hashes
 - `.dvc` file points to the correct hash
 - No data loss or corruption
@@ -261,6 +268,7 @@ git push origin data/my-experiment
 ### 2. Accidental Large Files in Git
 
 **Protection:** `.gitignore` blocks raw training data:
+
 ```gitignore
 # Training data - managed by DVC (not Git)
 WMS/data/training/images/
@@ -268,6 +276,7 @@ WMS/data/training/masks/
 ```
 
 **If you accidentally stage large files:**
+
 ```bash
 # Unstage files
 git reset HEAD WMS/data/training/images/
@@ -282,12 +291,14 @@ git clean -fd WMS/data/training/
 Every data upload is validated **before** training:
 
 **Checks:**
+
 - ✅ Image↔mask filename matching
 - ✅ Resolution: 512×512 pixels
 - ✅ Mask format: binary PNG (0 or 255 values)
 - ✅ File format: `.jpg`, `.jpeg`, `.png`
 
 **If validation fails:**
+
 - PR is NOT created
 - Error comment posted on commit
 - Training does NOT run
@@ -296,17 +307,20 @@ Every data upload is validated **before** training:
 ### 4. S3 Upload Failures
 
 **If `dvc push` fails:**
+
 - Hook aborts the push
 - Returns to original branch
 - Deletes the failed data branch
 - You see clear error message
 
 **Common causes:**
+
 - AWS credentials expired
 - Network connection issue
 - S3 bucket permissions
 
 **Fix:**
+
 ```bash
 # Refresh AWS credentials (AWS Academy labs)
 aws configure
@@ -322,6 +336,7 @@ git push origin main
 ### 5. Version Control & Rollback
 
 **Every data upload is versioned:**
+
 ```bash
 # View data history
 git log --oneline -- WMS/data/training/*.dvc
@@ -340,16 +355,19 @@ dvc checkout
 ### Issue 1: "DVC add failed"
 
 **Error:**
+
 ```
 ❌ DVC add failed for images
 ```
 
 **Causes:**
+
 - Directory doesn't exist
 - No files in directory
 - Permission issues
 
 **Fix:**
+
 ```bash
 # Verify files exist
 ls -la WMS/data/training/images/
@@ -362,12 +380,14 @@ dvc status
 ### Issue 2: "DVC push to S3 failed"
 
 **Error:**
+
 ```
 ❌ DVC push to S3 failed
 Please check your AWS credentials and DVC configuration
 ```
 
 **Fix:**
+
 ```bash
 # Check AWS credentials
 aws sts get-caller-identity
@@ -385,6 +405,7 @@ dvc remote list
 **Cause:** Workflow didn't pull data from DVC before validation.
 
 **Fix:** The `training-data-pipeline.yaml` workflow automatically runs `dvc pull` before validation. If this step fails, check AWS secrets in GitHub:
+
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_SESSION_TOKEN`
@@ -392,6 +413,7 @@ dvc remote list
 ### Issue 4: "Branch already exists"
 
 **Error:**
+
 ```
 ❌ Failed to create branch data/20260209-143022
 ```
@@ -405,16 +427,18 @@ dvc remote list
 **Problem:** After cloning the repo, `WMS/data/training/` is empty.
 
 **Solution:** Pull data from DVC:
+
 ```bash
 dvc pull WMS/data/training/images.dvc
 dvc pull WMS/data/training/masks.dvc
 ```
 
 **For new contributors:**
+
 ```bash
 # Clone with submodules
 git clone --recurse-submodules <repo-url>
-cd Water-Meters-Segmentation-Autimatization
+cd Water-Meters-Segmentation-Automatization
 
 # Configure AWS credentials
 aws configure
@@ -465,6 +489,7 @@ dvc pull
 ## Questions?
 
 If you encounter issues not covered here:
+
 1. Check workflow logs in GitHub Actions
 2. Review `KNOWN_ISSUES.md` for AWS Academy limitations
 3. Check MLflow tracking server for training history

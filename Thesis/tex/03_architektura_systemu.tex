@@ -31,7 +31,7 @@ Dodatkowym ograniczeniem środowiska AWS Academy jest brak możliwości tworzeni
 Projekt korzysta z dwóch repozytoriów Git połączonych mechanizmem submodułów:
 
 \begin{itemize}
-  \item \textbf{Water-Meters-Segmentation-Autimatization} --- repozytorium główne, zawiera kod ML, metadane danych treningowych śledzone przez DVC, workflow GitHub Actions, konfigurację Docker i Helm oraz skrypty pomocnicze. Całość procesu CI/CD wyzwalana jest w tym repozytorium.
+  \item \textbf{Water-Meters-Segmentation-Automatization} --- repozytorium główne, zawiera kod ML, metadane danych treningowych śledzone przez DVC, workflow GitHub Actions, konfigurację Docker i Helm oraz skrypty pomocnicze. Całość procesu CI/CD wyzwalana jest w tym repozytorium.
   \item \textbf{DevOps-AI-Model-Automatization} --- repozytorium infrastruktury, dołączone jako submoduł pod ścieżką \texttt{devops/}; zawiera moduły Terraform, skrypty konfiguracyjne EC2 oraz niniejszą pracę dyplomową.
 \end{itemize}
 
@@ -56,7 +56,7 @@ Podział na dwa repozytoria wynika z różnego rytmu zmian: kod ML i dane zmieni
 
 % --- Repozytorium główne ---
 \node[repo, fill=blue!6] (main) {
-  \textbf{Water-Meters-Segmentation-Autimatization} \quad {\normalfont\small\sffamily\textit{(repozytorium główne)}}\\[4pt]
+  \textbf{Water-Meters-Segmentation-Automatization} \quad {\normalfont\small\sffamily\textit{(repozytorium główne)}}\\[4pt]
   \textbullet\ WMS/\ \ --- kod ML, skrypty treningowe\\
   \textbullet\ .github/workflows/\ \ --- pipeline CI/CD\\
   \textbullet\ docker/,\ helm/\ \ --- konteneryzacja\\

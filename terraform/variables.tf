@@ -19,7 +19,7 @@ variable "availability_zone" {
 variable "instance_type" {
   description = "EC2 instance type"
   type        = string
-  default     = "t3.large"  # 8GB RAM, stable for ML workloads with PyTorch
+  default     = "t3.large" # 8GB RAM, stable for ML workloads with PyTorch
 }
 
 # my_ip variable removed - now auto-detected via HTTP data source in vpc module
@@ -42,7 +42,7 @@ variable "mlflow_bucket" {
 variable "github_repo" {
   description = "GitHub repository in format 'owner/repo'"
   type        = string
-  default     = "Rafallost/Water-Meters-Segmentation-Autimatization"
+  default     = "Rafallost/Water-Meters-Segmentation-Automatization"
 }
 
 variable "install_monitoring" {

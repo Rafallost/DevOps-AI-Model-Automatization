@@ -19,7 +19,7 @@ This guide explains how to install and configure a GitHub Actions self-hosted ru
 
 ### 1. Get Runner Token from GitHub
 
-1. Go to your GitHub repository: https://github.com/Rafallost/Water-Meters-Segmentation-Autimatization
+1. Go to your GitHub repository: https://github.com/Rafallost/Water-Meters-Segmentation-Automatization
 2. Navigate to **Settings** → **Actions** → **Runners**
 3. Click **New self-hosted runner**
 4. Select **Linux** and **x64**
@@ -49,7 +49,7 @@ tar xzf actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
 
 # Configure runner
 ./config.sh \
-  --url https://github.com/Rafallost/Water-Meters-Segmentation-Autimatization \
+  --url https://github.com/Rafallost/Water-Meters-Segmentation-Automatization \
   --token <TOKEN_FROM_GITHUB> \
   --name ec2-runner \
   --labels self-hosted,linux,x64,ml-training \

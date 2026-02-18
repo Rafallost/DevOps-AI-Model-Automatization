@@ -114,6 +114,7 @@ EOF
 ```
 
 **Potential issues:**
+
 - MLflow not started → manual start required
 - Network timeout → retry
 - Wrong model version → manual investigation
@@ -141,7 +142,7 @@ On EC2 (or locally):
 
 ```bash
 # Navigate to project root
-cd ~/Water-Meters-Segmentation-Autimatization
+cd ~/Water-Meters-Segmentation-Automatization
 
 # Build Docker image manually
 docker build -f docker/Dockerfile.serve -t wms-model:latest .
@@ -164,6 +165,7 @@ docker rm wms-test
 ```
 
 **Potential issues:**
+
 - Dockerfile syntax error → manual fix
 - Missing dependencies → update requirements.txt and rebuild
 - Build fails → debug and retry
@@ -201,6 +203,7 @@ aws ecr describe-images \
 ```
 
 **Potential issues:**
+
 - ECR login expired → re-login
 - Network timeout during push → retry
 - Insufficient permissions → check IAM role
@@ -238,6 +241,7 @@ kubectl get nodes
 ```
 
 **Potential issues:**
+
 - Permission denied → fix file permissions
 - Connection timeout → check security group allows port 6443
 - kubeconfig wrong IP → manually edit file
@@ -266,6 +270,7 @@ kubectl get secret ecr-secret -o yaml
 ```
 
 **Potential issues:**
+
 - Token expires after 12 hours → recreate secret
 - Namespace mismatch → specify correct namespace
 - Secret already exists → delete and recreate
@@ -316,34 +321,34 @@ spec:
       imagePullSecrets:
         - name: ecr-secret
       containers:
-      - name: model
-        image: 055677744286.dkr.ecr.us-east-1.amazonaws.com/wms-model:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: MLFLOW_TRACKING_URI
-          value: "http://10.0.1.16:5000"  # MANUAL: Get internal IP!
-        - name: MODEL_VERSION
-          value: "production"
-        resources:
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 10
+        - name: model
+          image: 055677744286.dkr.ecr.us-east-1.amazonaws.com/wms-model:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://10.0.1.16:5000" # MANUAL: Get internal IP!
+            - name: MODEL_VERSION
+              value: "production"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -356,7 +361,7 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
-      nodePort: 30080  # Fixed port for external access
+      nodePort: 30080 # Fixed port for external access
 ```
 
 Apply manually:
@@ -373,6 +378,7 @@ kubectl logs <pod-name>
 ```
 
 **Potential issues:**
+
 - ImagePullBackOff → check ECR secret
 - CrashLoopBackOff → check logs for errors
 - Pod stuck Pending → check resource limits
@@ -408,8 +414,9 @@ curl http://$EC2_IP:30080/health
 ```
 
 Expected response:
+
 ```json
-{"status": "healthy", "model_loaded": true}
+{ "status": "healthy", "model_loaded": true }
 ```
 
 ### 7.3 Test Prediction Endpoint
@@ -428,6 +435,7 @@ file predicted_mask.png
 ```
 
 **Potential issues:**
+
 - 404 Not Found → service not exposed correctly
 - Connection refused → NodePort wrong or firewall blocking
 - 500 Internal Server Error → check pod logs
@@ -491,6 +499,7 @@ kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
 ```
 
 **Potential issues:**
+
 - Helm repo not added → add manually
 - Prometheus pods crash → check logs and resources
 - ServiceMonitor not scraping → check labels match
@@ -560,6 +569,7 @@ docker rmi 055677744286.dkr.ecr.us-east-1.amazonaws.com/wms-model:latest
 **Symptom:** Pod stuck in `ImagePullBackOff`
 
 **Solution:**
+
 ```bash
 # Check ECR secret
 kubectl get secret ecr-secret -o yaml
@@ -574,6 +584,7 @@ kubectl delete secret ecr-secret
 **Symptom:** `CrashLoopBackOff` or `Error` status
 
 **Solution:**
+
 ```bash
 # Check logs
 kubectl logs <pod-name>
@@ -589,6 +600,7 @@ kubectl logs <pod-name>
 **Symptom:** Pod takes >10 minutes to start
 
 **Solution:**
+
 - Check image size (should be ~8-9 GB)
 - ECR pull is slow on t3.small → upgrade to t3.medium
 - Model loading from MLflow is slow → optimize model size
@@ -598,6 +610,7 @@ kubectl logs <pod-name>
 **Symptom:** `curl http://$EC2_IP:30080/health` times out
 
 **Solution:**
+
 ```bash
 # Check security group allows port 30080
 aws ec2 describe-security-groups \
@@ -617,18 +630,18 @@ aws ec2 authorize-security-group-ingress \
 
 ### Total Time (Manual Deployment):
 
-| Step | Time | Complexity |
-|------|------|------------|
-| 1. Download Model | 5-10 min | Medium |
-| 2. Build Docker | 10-15 min | High |
-| 3. Push to ECR | 5-10 min | Medium |
-| 4. Configure kubectl | 5-10 min | Medium |
-| 5. Create ECR Secret | 5 min | Low |
-| 6. Deploy to k3s | 10-15 min | High |
-| 7. Verify Deployment | 5-10 min | Medium |
-| 8. Setup Monitoring | 20-30 min | Very High |
-| 9. Documentation | 10-15 min | Low |
-| **TOTAL** | **75-120 min** | **High** |
+| Step                 | Time           | Complexity |
+| -------------------- | -------------- | ---------- |
+| 1. Download Model    | 5-10 min       | Medium     |
+| 2. Build Docker      | 10-15 min      | High       |
+| 3. Push to ECR       | 5-10 min       | Medium     |
+| 4. Configure kubectl | 5-10 min       | Medium     |
+| 5. Create ECR Secret | 5 min          | Low        |
+| 6. Deploy to k3s     | 10-15 min      | High       |
+| 7. Verify Deployment | 5-10 min       | Medium     |
+| 8. Setup Monitoring  | 20-30 min      | Very High  |
+| 9. Documentation     | 10-15 min      | Low        |
+| **TOTAL**            | **75-120 min** | **High**   |
 
 **Actual time with issues:** 2-3 hours (debugging, retries, errors)
 
@@ -637,6 +650,7 @@ aws ec2 authorize-security-group-ingress \
 ## Comparison: Manual vs Automated CI/CD
 
 ### Manual Deployment (This Guide):
+
 ```
 Developer actions:
 1. Start EC2 (wait 2 min)
@@ -658,6 +672,7 @@ Total: 2-3 hours, high error rate, low reproducibility
 ```
 
 ### Automated CI/CD:
+
 ```
 Developer action:
 1. git push origin main
@@ -705,6 +720,7 @@ When performing manual deployment for comparison:
 ## Conclusion
 
 Manual deployment is:
+
 - ✅ Possible (you can deploy without CI/CD)
 - ❌ Time-consuming (2-3 hours vs 15 minutes)
 - ❌ Error-prone (many manual steps)
