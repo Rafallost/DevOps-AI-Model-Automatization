@@ -54,7 +54,7 @@ Większość jobów uruchamia się na środowisku zarządzanym przez GitHub (\te
 GitHub Actions umożliwia przekazywanie wartości między jobami przez mechanizm \textit{outputs}. Job \texttt{merge-and-validate} eksponuje wyniki walidacji (\texttt{validation\_passed}, liczba obrazów), a job \texttt{train} eksponuje flagę \texttt{improved}, na podstawie której warunkowane są dalsze joby. Artefakty GitHub Actions służą natomiast do przekazywania samych plików danych (scalony zbiór) między jobem \texttt{merge-and-validate} a jobem \texttt{train}, który wykonuje się na innym runnerze.
 
 \paragraph{Współbieżność}\mbox{}\\
-Klucz \texttt{concurrency.cancel-in-progress: false} sprawia, że jeśli użytkownik wypchnął dane kilkakrotnie zanim poprzednie uruchomienie zdążyło się zakończyć, kolejne uruchomienia nie są anulowane --- trafiają do kolejki i wykonują się po zakończeniu poprzednich. Podejście to chroni przed sytuacją, w której późniejszy push nadpisze wyniki wcześniejszego treningu, zanim zostanie on oceniony przez bramkę jakości.
+Klucz \texttt{concurrency.cancel-in-progress: false} sprawia, że jeśli użytkownik wypchnął dane kilkakrotnie zanim poprzednie uruchomienie zdążyło się zakończyć, kolejne uruchomienia nie są anulowane tylko trafiają do kolejki i wykonują się po zakończeniu poprzednich. Podejście to chroni przed sytuacją, w której późniejszy push nadpisze wyniki wcześniejszego treningu, zanim zostanie on oceniony przez bramkę jakości.
 
 \begin{figure}[H]
     \centering
@@ -66,7 +66,7 @@ Klucz \texttt{concurrency.cancel-in-progress: false} sprawia, że jeśli użytko
 \subsection{Walidacja danych}
 
 \begin{sloppypar}
-Po wypchnięciu gałęzi danych uruchamia się pierwszy job workflow \texttt{training-data-pipeline.yaml} \cite{github_actions_docs}: \texttt{merge-and-validate}. Składa się on z dwóch faz.
+Po wypchnięciu gałęzi danych uruchamia się pierwszy job workflow \texttt{training-data-pipeline.yaml}: \texttt{merge-and-validate} \cite{github_actions_docs}. Składa się on z dwóch faz.
 \end{sloppypar}
 
 \paragraph{Faza scalania}\mbox{}\\
@@ -109,7 +109,7 @@ Główny workflow \texttt{training-data-pipeline.yaml} składa się z ośmiu job
 Omówiony we wcześniejszym fragmencie. Pobiera istniejące dane z S3, scala je z nowo dostarczonymi plikami, uruchamia skrypt \texttt{data-qa.py}, aktualizuje manifesty DVC i przesyła scalony zbiór jako artefakt GitHub Actions.
 
 \paragraph{Job 2: start-infra}\mbox{}\\
-Wykonuje się na hoście GitHub (nie na EC2) i jest odpowiedzialny wyłącznie za uruchomienie infrastruktury. Wywołuje AWS CLI (\texttt{aws ec2 start-instances}) z identyfikatorem instancji zapisanym w sekretach repozytorium. Po wysłaniu polecenia co 30 sekund sprawdza API GitHub, czy self-hosted runner przypisany do tej instancji pojawił się w stanie \textit{online} --- czeka maksymalnie 10 minut. Dzięki temu każdy kolejny job pewnie trafi na już działającą instancję.
+Wykonuje się na hoście GitHub (nie na EC2) i jest odpowiedzialny wyłącznie za uruchomienie infrastruktury. Wywołuje AWS CLI (\texttt{aws ec2 start-instances}) z identyfikatorem instancji zapisanym w sekretach repozytorium. Po wysłaniu polecenia co 30 sekund sprawdza API GitHub, czy self-hosted runner przypisany do tej instancji pojawił się w stanie \textit{online} i czeka maksymalnie 10 minut. Dzięki temu każdy kolejny job pewnie trafi na już działającą instancję.
 
 \paragraph{Job 3: train}\mbox{}\\
 Jedyny job wykonywany na self-hosted runnerze, czyli bezpośrednio na instancji EC2. Pobiera scalony zbiór danych z artefaktu GitHub Actions, uruchamia skrypt \texttt{train.py}, który inicjalizuje model U-Net z seedem równym numerowi uruchomienia (\texttt{run\_number}), trenuje przez zdefiniowaną liczbę epok i loguje metryki \texttt{val\_dice} oraz \texttt{val\_iou} do MLflow. Po zakończeniu treningu skrypt \texttt{quality-gate.py} pobiera metryki aktualnego modelu Production z rejestru MLflow, porównuje je z wynikami nowego treningu i ustawia output \texttt{improved=true} lub \texttt{improved=false}, sterując dalszym przebiegiem workflow.
@@ -118,16 +118,16 @@ Jedyny job wykonywany na self-hosted runnerze, czyli bezpośrednio na instancji 
 Zatrzymuje instancję EC2 gdy trening zakończył się błędem lub model nie poprawił wyników (\texttt{if: always() \&\& (train.result != 'success' || improved != 'true')}). Jest to reużywalny workflow wywołujący \texttt{aws ec2 stop-instances}. Dzięki warunkowi \texttt{always()} job uruchamia się nawet gdy poprzednie jobe zakończyły się wyjątkiem, eliminując ryzyko pozostawienia uruchomionej instancji i nieoczekiwanych kosztów.
 
 \paragraph{Job 5: deploy}\mbox{}\\
-Uruchamia się wyłącznie jeśli model spełnił kryteria bramki jakości (\texttt{if: improved == 'true'}). Wykonuje się na self-hosted runnerze na EC2. Buduje obraz Docker na podstawie \texttt{docker/Dockerfile.serve}, taguje go numerem wersji i hashiem commita, uwierzytelnia się w Amazon ECR i wgrywa obraz. Następnie wywołuje \texttt{helm upgrade}, który zaktualizuje deployment na klastrze k3s do nowej wersji obrazu --- kontener przy starcie pobiera model ze stadium Production z rejestru MLflow, co oddziela wersję obrazu od wersji modelu. Po wdrożeniu wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
+Uruchamia się wyłącznie jeśli model spełnił kryteria bramki jakości (\texttt{if: improved == 'true'}). Wykonuje się na self-hosted runnerze na EC2. Buduje obraz Docker na podstawie pliku \\\texttt{docker/Dockerfile.serve}, taguje go numerem wersji i hashiem commita, uwierzytelnia się w Amazon ECR i wgrywa obraz. Następnie wywołuje \texttt{helm upgrade}, który zaktualizuje deployment na klastrze k3s do nowej wersji obrazu. Kontener przy starcie pobiera model ze stadium Production z rejestru MLflow, co oddziela wersję obrazu od wersji modelu. Po wdrożeniu wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
 
 \paragraph{Job 6: stop-after-deploy}\mbox{}\\
-Zatrzymuje instancję EC2 po zakończeniu joba \texttt{deploy} (\texttt{if: always()}). Stanowi odpowiednik \texttt{stop-infra} dla ścieżki, gdy model się poprawił. Istnieje jako osobny job, ponieważ \texttt{deploy} korzysta z runnera na EC2 --- instancja musi pozostać uruchomiona do końca wdrożenia i może zostać zatrzymana dopiero po jego zakończeniu.
+Zatrzymuje instancję EC2 po zakończeniu joba \texttt{deploy} (\texttt{if: always()}). Stanowi odpowiednik \texttt{stop-infra} dla ścieżki, gdy model się poprawił. Istnieje jako osobny job, ponieważ \texttt{deploy} korzysta z runnera na EC2. Instancja musi pozostać uruchomiona do końca wdrożenia i może zostać zatrzymana dopiero po jego zakończeniu.
 
 \paragraph{Job 7: create-pr}\mbox{}\\
 Uruchamia się równolegle z jobem \texttt{deploy}, jeśli model spełnił kryteria bramki jakości. Tworzy pull request z gałęzi danych do \texttt{main} z automatycznie generowanym opisem zawierającym zestawienie metryk: wartości \texttt{val\_dice} i \texttt{val\_iou} nowego modelu oraz poprzedniego baseline, a także link do uruchomienia MLflow. Pull request scala zaktualizowane manifesty DVC (\texttt{images.dvc}, \texttt{masks.dvc}) z gałęzią główną, trwale łącząc wersję kodu z wersją danych.
 
 \paragraph{Job 8: auto-merge}\mbox{}\\
-Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr merge --auto}). Scalenie następuje natychmiast po pozytywnym przejściu statusowych sprawdzeń wymaganych przez reguły ochrony gałęzi. W efekcie, jeśli model się poprawił, cały cykl --- od wypchnięcia danych do scalenia z \texttt{main} --- odbywa się bez żadnej ręcznej interwencji.
+Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr merge --auto}). Scalenie następuje natychmiast po pozytywnym przejściu statusowych sprawdzeń wymaganych przez reguły ochrony gałęzi. W efekcie, jeśli model się poprawił to cały cykl od wypchnięcia danych do scalenia z \texttt{main} odbywa się bez żadnej ręcznej interwencji.
 
 \begin{figure}[H]
     \centering
@@ -138,24 +138,15 @@ Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr mer
 
 \subsection{Bramka jakości}
 
-Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacja jest w skrypcie \texttt{quality-gate.py} i korzysta z API MLflow Model Registry \cite{mlflow_model_registry}.
+Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacj korzysta z API MLflow Model Registry \cite{mlflow_model_registry} (\texttt{quality-gate.py}). Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
 
-\paragraph{Pobieranie baseline}\mbox{}\\
-Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
-
+\paragraph{Pobieranie baseline}
 \begin{verbatim}
 client = MlflowClient(tracking_uri=mlflow_uri)
 versions = client.get_latest_versions(
     "water-meter-segmentation",
     stages=["Production"]
 )
-if versions:
-    baseline_run = client.get_run(versions[0].run_id)
-    baseline_dice = float(
-        baseline_run.data.metrics["val_dice"]
-    )
-else:
-    baseline_dice = 0.0  # pierwsze trenowanie
 \end{verbatim}
 
 \paragraph{Logika decyzyjna}\mbox{}\\
@@ -170,7 +161,21 @@ Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{img/05_pipline_ci_cd/not_improved_model_example.png}
+    \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/not_improved_model.png}
     \caption{Przykład z nieudanego przebiegu pipeline CI/CD --- model nie spełnia kryteriów bramki jakości.}
     \label{fig:workflow-not-improved}
+\end{figure}
+
+\begin{figure}[H]
+ \centering
+ \begin{minipage}{0.48\linewidth}
+   \includegraphics[width=0.8\linewidth]{img/05_pipline_ci_cd/not_improved_model_gate.png}
+   \caption{Wynik bramki jakości --- model nie spełnił kryteriów, więc nie został wdrożony.}
+   \label{fig:quality-gate-not-improved}
+ \end{minipage}\hfill
+ \begin{minipage}{0.48\linewidth}
+   \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/not_improved_model_summary.png}
+   \caption{Podsumowanie metryk modelu, który nie spełnił kryteriów bramki jakości.}
+   \label{fig:not-improved-model-summary}
+ \end{minipage}
 \end{figure}

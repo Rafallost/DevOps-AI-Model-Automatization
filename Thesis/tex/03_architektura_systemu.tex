@@ -8,11 +8,11 @@ Niniejszy rozdział opisuje zaprojektowaną architekturę systemu: wybrane kompo
 Projektując system, kierowano się pięcioma celami:
 
 \begin{enumerate}
-  \item \textbf{Pełna automatyzacja} --- jedyną akcją użytkownika jest \texttt{git push}; walidacja, trening, ocena jakości i wdrożenie odbywają się bez interwencji.
+  \item \textbf{Pełna automatyzacja} --- użytownik jedynie będzie używać \texttt{git push} lub uruchamiać aplikacje; walidacja, trening, ocena jakości i wdrożenie odbywają się bez interwencji.
   \item \textbf{Reprodukowalność} --- każda wersja modelu musi być powiązana z wersją kodu, wersją danych i zapisanymi metrykami.
   \item \textbf{Kontrola kosztów} --- projekt realizowany w ramach konta AWS Academy z budżetem ~50~USD; zasoby uruchamiane tylko gdy potrzebne.
   \item \textbf{Kontrola czasu} --- trening nie może przekraczać 2,5~h, aby zmieścić się w 4-godzinnym oknie sesji laboratorium AWS.
-  \item \textbf{Porównywalność} --- system zbiera mierzalne dane (czas, koszt, liczba kroków manualnych) do porównania z podejściem manualnym.
+  \item \textbf{Porównywalność} --- system musi być zbudowany w sposób umożliwiający zebranie wymieranych danych w celu porównania z podejściem manualnym.
 \end{enumerate}
 
 Ograniczenia budżetowe wykluczyły usługi o wysokim koszcie stałym: EKS (~\$150/mies.), RDS (~\$30/mies.), NAT Gateway (~\$32/mies.) i ALB (~\$18/mies.) --- zastąpione przez k3s na EC2, SQLite i NodePort.
@@ -109,9 +109,9 @@ Punkt wejścia do systemu stanowi maszyna lokalna użytkownika (Data Scientist).
 
 \subsubsection{Warstwa kontroli wersji i automatyzacji}
 
-Centralnym punktem systemu jest platforma GitHub łącząca kontrolę wersji kodu z automatyzacją pipeline'u. Repozytorium Git \cite{chacon2014pro_git} przechowuje kod ML, definicje workflow i konfigurację wdrożenia (Helm charts), natomiast binarne pliki danych treningowych przechowywane są w Amazon S3 i śledzone przez DVC \cite{dvc_docs} --- w repozytorium zapisywane są wyłącznie lekkie pliki metadanych (\texttt{.dvc}) zawierające hasze i rozmiary plików, co pozwala wersjonować duże zbiory danych bez obciążania historii Git.
+Centralnym punktem systemu jest platforma GitHub łącząca kontrolę wersji kodu z automatyzacją pipeline'u. Repozytorium Git \cite{chacon2014pro_git} przechowuje kod ML, definicje workflow i konfigurację wdrożenia (Helm charts), natomiast binarne pliki danych treningowych przechowywane są w Amazon S3 i śledzone przez DVC \cite{dvc_docs} sprawia, że w repozytorium zapisywane są wyłącznie lekkie pliki metadanych (\texttt{.dvc}) zawierające hasze i rozmiary plików, co pozwala wersjonować duże zbiory danych bez obciążania historii Git.
 
-GitHub Actions \cite{github_actions_docs} orkiestruje cały cykl życia modelu: wykrywa pojawienie się gałęzi danych, pobiera historyczny zbiór z S3, scala go z nowo dostarczonymi plikami, uruchamia walidację, startuje infrastrukturę obliczeniową, trenuje model, ocenia go przez bramkę jakości i --- jeśli model się poprawił --- wdraża go i scala gałąź danych z \texttt{main}. Workflow korzysta z reużywalnych podworkflow dla operacji na EC2, co eliminuje powielanie konfiguracji.
+GitHub Actions \cite{github_actions_docs} orkiestruje cały cykl życia modelu: wykrywa pojawienie się gałęzi danych, pobiera historyczny zbiór z S3, scala go z nowo dostarczonymi plikami, uruchamia walidację, startuje infrastrukturę obliczeniową, trenuje model, ocenia go przez bramkę jakości: jeśli model się poprawił to wdraża go i scala gałąź danych z \texttt{main}. Workflow korzysta z reużywalnych podworkflow dla operacji na EC2, co eliminuje powielanie konfiguracji.
 
 \subsubsection{Warstwa infrastruktury chmurowej}
 
@@ -119,7 +119,7 @@ Zasoby AWS tworzone są deklaratywnie za pomocą Terraform \cite{hashicorp_terra
 
 \subsubsection{Warstwa platformy ML i serwowania}
 
-Na klastrze k3s \cite{k3s_docs} uruchomionym na instancji EC2 działają cztery komponenty. MLflow pełni rolę centralnego rejestru eksperymentów i modeli --- każde uruchomienie treningu loguje parametry, metryki i artefakty, a model w stadium Production stanowi punkt odniesienia dla bramki jakości \cite{mlflow_model_registry}. API modelu zbudowane na FastAPI i zarządzane przez Helm \cite{helm_docs} udostępnia endpoint \texttt{/predict} przyjmujący obrazy i zwracający maski segmentacyjne; model pobierany jest z rejestru MLflow przy starcie kontenera, co oddziela wersję obrazu Docker od wersji modelu. Konteneryzacja przez Docker \cite{merkel2014docker} zapewnia identyczne środowisko uruchomieniowe niezależnie od hosta. Stos monitoringu Prometheus \cite{prometheus_docs}~+~Grafana zbiera metryki działania API (liczba predykcji, czasy odpowiedzi, błędy) i prezentuje je na dashboardzie dostępnym przez NodePort.
+Na klastrze k3s \cite{k3s_docs} uruchomionym na instancji EC2 działają cztery komponenty. MLflow pełni rolę centralnego rejestru eksperymentów i modeli. Każde uruchomienie treningu loguje parametry, metryki i artefakty, a model w stadium Production stanowi punkt odniesienia dla bramki jakości \cite{mlflow_model_registry}. API modelu zbudowane na FastAPI i zarządzane przez Helm \cite{helm_docs} udostępnia endpoint \texttt{/predict} przyjmujący obrazy i zwracający maski segmentacyjne; model pobierany jest z rejestru MLflow przy starcie kontenera, co oddziela wersję obrazu Docker od wersji modelu. Konteneryzacja przez Docker \cite{merkel2014docker} zapewnia identyczne środowisko uruchomieniowe niezależnie od hosta. Stos monitoringu Prometheus \cite{prometheus_docs}~+~Grafana zbiera metryki działania API (liczba predykcji, czasy odpowiedzi, błędy) i prezentuje je na dashboardzie dostępnym przez NodePort.
 
 \subsection{Kluczowe decyzje projektowe}
 
