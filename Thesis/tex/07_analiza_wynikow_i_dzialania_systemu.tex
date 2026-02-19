@@ -1,19 +1,18 @@
-\section{Analiza Wyników i Działania Systemu WIP}
+\section{Analiza Wyników i Działania Systemu}
 \label{sec:Analiza_wynikow}
 
 \subsection{Metodologia porównania}
 
-Celem eksperymentów jest ilościowe i jakościowe porównanie trzech podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}:
+Celem eksperymentów jest ilościowe i jakościowe porównanie dwóch podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}:
 
 \begin{enumerate}
   \item \textbf{Podejście ręczne} --- wszystkie kroki (przygotowanie danych, trening, walidacja, wdrożenie) wykonywane przez człowieka bez automatyzacji.
-  \item \textbf{Uproszczone CI/CD} --- pipeline z częściową automatyzacją (automatyczny trening po merge, ręczna walidacja jakości i wdrożenie).
-  \item \textbf{Zautomatyzowane CI/CD (niniejszy projekt)} --- pełna automatyzacja od push danych do wdrożenia modelu.
+  \item \textbf{Zautomatyzowane CI/CD (niniejszy projekt)} --- pełna automatyzacja od push danych do wdrożenia modelu w oparciu o GitHub Actions, DVC i MLflow.
 \end{enumerate}
 
 Porównanie obejmuje następujące wymiary:
 \begin{itemize}
-  \item czas potrzebny do wykonania każdego scenariusza,
+  \item czas nakładu pracy człowieka w każdym podejściu,
   \item jakość modelu (metryki Dice i IoU),
   \item pracochłonność (liczba ręcznych kroków),
   \item ryzyko błędu ludzkiego,
@@ -22,32 +21,33 @@ Porównanie obejmuje następujące wymiary:
 
 \subsection{Czasy wykonania scenariuszy}
 
-Tabela \ref{tab:czasy} przedstawia zmierzone czasy dla każdego podejścia w scenariuszu dodania nowej partii danych treningowych i wdrożenia ulepszonego modelu.
+Tabela \ref{tab:czasy} zestawia szacowane czasy nakładu pracy człowieka dla każdego podejścia w scenariuszu dodania nowej partii danych treningowych i wdrożenia ulepszonego modelu. Wartości dla podejścia ręcznego mają charakter szacunkowy i zakładają doświadczonego inżyniera ML znającego narzędzia projektu. Wartości dla podejścia zautomatyzowanego zostały zmierzone na podstawie logów GitHub Actions.
 
 \begin{table}[H]
 \centering
-\caption{Porównanie czasów wykonania scenariuszy}
+\caption{Porównanie nakładu pracy człowieka w obu scenariuszach}
 \label{tab:czasy}
-\begin{tabular}{|l|r|r|r|}
+\begin{tabular}{|l|r|r|}
 \hline
-\textbf{Etap} & \textbf{Ręczny} & \textbf{Uproszczone CI/CD} & \textbf{Zautomatyzowane CI/CD} \\
+\textbf{Etap} & \textbf{Ręczny} & \textbf{Zautomatyzowane CI/CD} \\
 \hline
-Przygotowanie danych & \textit{[uzup.]} & \textit{[uzup.]} & $<1$ min \\
-Walidacja danych & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
-Trening modelu & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
-Ocena jakości & \textit{[uzup.]} & \textit{[uzup.]} & $<1$ min \\
-Wdrożenie & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
+Przygotowanie i upload danych & $\sim$30 min & $\sim$10 min \\
+Walidacja danych & $\sim$30 min & $\sim$10 min (poprawki złych danych) \\
+Trening modelu & $\sim$3 h & automatyczny \\
+Ocena jakości & $\sim$15 min & automatyczna \\
+Wdrożenie & $\sim$45 min & automatyczne \\
 \hline
-\textbf{Łącznie} & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
+\textbf{Nakład człowieka łącznie} & $\sim$5 h & $\sim$20 min \\
+\textbf{Całkowity czas pipeline'u} & $\sim$5 h & $\sim$4 h \\
 \hline
 \end{tabular}
 \end{table}
 
-% [UZUPEŁNIĆ: komentarz do wyników tabeli]
+Kluczową obserwacją jest rozróżnienie między \textit{nakładem pracy człowieka} a \textit{całkowitym czasem realizacji}. W podejściu ręcznym są one tożsame, ponieważ człowiek jest zaangażowany przez cały czas trwania procesu. W podejściu zautomatyzowanym inżynier wykonuje jedynie komendę \texttt{git push} (poniżej jednej minuty), po czym pipeline działa bez jego udziału. Całkowity czas działania pipeline'u, od push do wdrożenia, można odczytać z zakładki \textit{Actions} w repozytorium GitHub.
 
 \subsection{Metryki modelu}
 
-Tabela \ref{tab:metryki} przedstawia metryki modelu dla kolejnych wersji wytrenowanych w ramach eksperymentów. Baseline pochodzi z repozytorium referencyjnego \textit{Water-Meters-Segmentation} \cite{kaggle_water_meters}. Metryki są rejestrowane automatycznie przez MLflow \cite{zaharia2018mlflow} podczas każdego treningu.
+Tabela \ref{tab:metryki} przedstawia metryki modelu dla kolejnych wersji wytrenowanych w ramach projektu. Baseline pochodzi z repozytorium referencyjnego \textit{Water-Meters-Segmentation} \cite{kaggle_water_meters}. Metryki są rejestrowane automatycznie przez MLflow \cite{zaharia2018mlflow} podczas każdego treningu.
 
 \begin{table}[H]
 \centering
@@ -55,42 +55,104 @@ Tabela \ref{tab:metryki} przedstawia metryki modelu dla kolejnych wersji wytreno
 \label{tab:metryki}
 \begin{tabular}{|l|c|c|l|}
 \hline
-\textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Uwagi} \\
+\textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Hausdorff} \\
 \hline
-Baseline (referencyjny) & 0{,}9275 & 0{,}8865 & Oryginalny model \\
-v1 --- pierwsze trenowanie & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
-v2 --- po dodaniu danych & \textit{[uzup.]} & \textit{[uzup.]} & \textit{[uzup.]} \\
+v21  & 0{,}8067 & 0{,}7286 & 49{,}0034 \\
+v20  & 0{,}8134 & 0{,}7409 & 59{,}9987 \\
+v18  & 0{,}5998 & 0{,}5508 & 226{,}5247 \\
+v16  & 0{,}4825 & 0{,}4518 & 94{,}3321 \\
+v14  & 0{,}4710 & 0{,}4060 & 181{,}2840 \\
+v13  & 0{,}0741 & 0{,}0388 & 148{,}5599 \\
+v12  & 0{,}0042 & 0{,}0021 & 358{,}6141 \\
+v11  & 0{,}0449 & 0{,}0233 & 355{,}3105 \\
+v10  & 0{,}0449 & 0{,}0233 & 355{,}3105 \\
+v9  & 0{,}3116 & 0{,}2461 & 329{,}8586 \\
+v8  & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
+v7  & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
+v5  & 0{,}3125 & 0{,}1852 & 272{,}5949 \\
+v3  & $3{,}5689\cdot 10^{-10}$ & $3{,}5689\cdot 10^{-10}$ & 724{,}0773 \\
+v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
 \hline
 \end{tabular}
 \end{table}
 
-% [UZUPEŁNIĆ: screenshoty z MLflow UI z wykresami metryk]
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/mlfow_models_metrics_all.png}
+ \caption{Metryki jakości modelu w interfejsie MLflow.}
+ \label{fig:mlflow-metrics-all}
+\end{figure}
 
-\subsection{Metryki infrastruktury}
 
-\subsubsection{Zużycie zasobów podczas treningu}
+\begin{table}[H]
+\centering
+\caption{Metryki jakości modelu typu production dla kolejnych wersji}
+\label{tab:metryki}
+\begin{tabular}{|l|c|c|l|}
+\hline
+\textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Hausdorff} \\
+\hline
+v20  & 0{,}8134 & 0{,}7409 & 59{,}9987 \\
+v18  & 0{,}5998 & 0{,}5508 & 226{,}5247 \\
+v16  & 0{,}4825 & 0{,}4518 & 94{,}3321 \\
+v14  & 0{,}4710 & 0{,}4060 & 181{,}2840 \\
+v9   & 0{,}3116 & 0{,}2461 & 329{,}8586 \\
+v5   & 0{,}3125 & 0{,}1852 & 272{,}5949 \\
+v3   & $3{,}5689\cdot 10^{-10}$ & $3{,}5689\cdot 10^{-10}$ & 724{,}0773 \\
+v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
+\hline
+\end{tabular}
+\end{table}
 
-% [UZUPEŁNIĆ: screenshoty z Grafana - CPU/RAM podczas treningu na EC2]
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=0.9\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/mlflow_models_metrics_production.png}
+ \caption{Metryki jakości modelu w interfejsie MLflow który miały stage Production.}
+ \label{fig:mlflow-metrics-production}
+\end{figure}
 
-Podczas treningu modelu monitorowano obciążenie instancji EC2. Kluczowe obserwacje:
-\begin{itemize}
-  \item szczytowe zużycie CPU: % [UZUPEŁNIĆ] \%,
-  \item szczytowe zużycie RAM: % [UZUPEŁNIĆ] GB z % [UZUPEŁNIĆ] GB dostępnych,
-  \item czas treningu jednej epoki: % [UZUPEŁNIĆ] s.
-\end{itemize}
+Metryki można odczytać z interfejsu MLflow w zakładce \textit{Models} po wybraniu wersji oznaczonej stage \textit{Production}. Bramka jakości w pipeline automatycznie porównuje nowy model z aktualną wersją produkcyjną i tworzy pull request tylko w przypadku jednoczesnej poprawy obu metryk.
 
-\subsubsection{Zużycie zasobów podczas serwowania}
+Warto zauważyć, że wczesne wersje modelu (v1, v3) uzyskały wartości Dice i IoU rzędu $10^{-10}$, co w praktyce oznacza brak jakiejkolwiek zdolności predykcyjnej. Tak skrajnie niskie wartości nie są widoczne na wykresach interfejsu MLflow, który ustala skale do wartości znaczących (z obsługa zera jako wyjątku). Jest to ograniczenie warstwy wizualizacyjnej frameworka, nie błąd eksperymentu ani rejestracji metryk. Same wartości zostały poprawnie zalogowane i są dostępne w widoku tabelarycznym.
 
-% [UZUPEŁNIĆ: screenshoty z Grafana - metryki API w trakcie testów obciążeniowych]
+Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowania i kontroli jakości. Wszystkie wersje modelu były rejestrowane w MLflow niezależnie od wyniku, co umożliwia pełną historię eksperymentów. Do etapu \textit{Production} awansowały wyłącznie wersje spełniające wymagania bramki jakości, a tylko te wersje były następnie pobierane przez serwis inferencyjny i udostępniane użytkownikom. Pozostałe wersje zachowały stage \textit{None} i nie uczestniczyły w deploymencie.
 
-API modelu serwującego predykcje charakteryzuje się następującymi parametrami wydajnościowymi:
-\begin{itemize}
-  \item średni czas odpowiedzi dla jednego obrazu: % [UZUPEŁNIĆ] ms,
-  \item przepustowość: % [UZUPEŁNIĆ] żądań/sekundę,
-  \item zużycie RAM przez pod: % [UZUPEŁNIĆ] MB.
-\end{itemize}
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=0.8\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/plot_accuracy.png}
+ \caption{Wykres metryki Accuracy dla najlepszej wersji modelu (v20) w interfejsie MLflow.}
+ \label{fig:mlflow-accuracy}
+\end{figure}
 
-\subsubsection{Koszty infrastruktury AWS}
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/plot_dice.png}
+ \caption{Wykres metryki Dice dla najlepszej wersji modelu (v20) w interfejsie MLflow.}
+ \label{fig:mlflow-dice}
+\end{figure}
+
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/plot_iou.png}
+ \caption{Wykres metryki IoU dla najlepszej wersji modelu (v20) w interfejsie MLflow.}
+ \label{fig:mlflow-iou}
+\end{figure}
+
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/plot_loss.png}
+ \caption{Wykres funkcji straty dla najlepszej wersji modelu (v20) w interfejsie MLflow.}
+ \label{fig:mlflow-loss}
+\end{figure}
+
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wyników_i_dzialanie_systemu/plot_pred_2.png}
+ \caption{Przykład predykcji modelu (v20) w interfejsie MLflow --- obraz wejściowy, maska referencyjna i maska przewidywana.}
+ \label{fig:mlflow-pred-2}
+\end{figure}
+
+\subsection{Koszty infrastruktury AWS}
 
 \begin{table}[H]
 \centering
@@ -100,21 +162,24 @@ API modelu serwującego predykcje charakteryzuje się następującymi parametram
 \hline
 \textbf{Zasób} & \textbf{Koszt} & \textbf{Uwagi} \\
 \hline
-EC2 t3.large (trening) & \textit{[uzup.]} USD/h & Uruchamiana tylko podczas treningu \\
-EC2 t3.large (serwowanie) & \textit{[uzup.]} USD/h & Stop/start przez workflow \\
-S3 (artefakty) & \textit{[uzup.]} USD/mies. & Zależy od liczby modeli \\
-ECR (obrazy) & \textit{[uzup.]} USD/mies. & \\
+EC2 t3.large (trening i serwowanie) & \$0{,}0832/h & Uruchamiana tylko podczas treningu (stop/start) \\
+S3 (artefakty DVC i MLflow) & $\sim$\$0{,}02/mies. & Kilka GB artefaktów \\
+ECR (obrazy Docker) & $\sim$\$0{,}05/mies. & Jeden obraz $\approx$500\,MB \\
 \hline
-\textbf{Łącznie (projekt)} & \textit{[uzup.]} USD & Za cały okres realizacji \\
+\textbf{Łącznie (projekt)} & \textit{20} USD & Za cały okres realizacji \\
 \hline
 \end{tabular}
 \end{table}
+
+Efektywność kosztową zapewnia architektura stop/start instancji EC2: instancja uruchamiana jest wyłącznie na czas treningu (job \texttt{start-infra}) i zatrzymywana bezpośrednio po jego zakończeniu (job \texttt{stop-infra}, uruchamiany zawsze niezależnie od wyniku). Rzeczywisty koszt całkowity projektu dostępny jest w konsoli AWS Academy w sekcji \textit{Billing \textgreater{} Bills}.
 
 \subsection{Ocena jakościowa}
 
 \subsubsection{Łatwość wdrożenia}
 
-% [UZUPEŁNIĆ: ocena na podstawie doświadczeń z implementacji]
+Konfiguracja systemu wymagała jednorazowego nakładu pracy obejmującego: przygotowanie infrastruktury Terraform (VPC, EC2, S3, ECR), konfigurację k3s i Helm, integrację MLflow z S3, napisanie skryptów walidacji danych i bramki jakości oraz przygotowanie workflow GitHub Actions. Jednorazowy koszt konfiguracji wyniósł kilka tygodni pracy. Po jego poniesieniu każde kolejne wdrożenie nowej wersji modelu wymaga jedynie wykonania \texttt{git push}.
+
+Podejście ręczne nie wymaga nakładu konfiguracyjnego, ale generuje cykliczny nakład pracy przy każdym wdrożeniu. Przy założeniu jednego wdrożenia miesięcznie i nakładzie $\sim$2,5 h na cykl, automatyzacja staje się opłacalna po kilkunastu cyklach, nie uwzględniając ryzyka błędu ludzkiego, które rośnie z liczbą powtórzeń.
 
 \subsubsection{Stabilność systemu}
 
