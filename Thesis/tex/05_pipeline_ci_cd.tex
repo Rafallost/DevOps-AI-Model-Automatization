@@ -89,14 +89,14 @@ python devops/scripts/data-qa.py WMS/data/training/ --output report.json
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\linewidth]{img/05_pipline_ci_cd/example_qa_stop.png}
+    \includegraphics[width=0.6\linewidth]{img/05_pipline_ci_cd/example_qa_stop.png}
     \caption{Przykład komentarza z wynikiem walidacji danych. W tym przypadku wykryto złą rozdzielczość, co skutkuje zatrzymaniem dalszych kroków pipeline.}
     \label{fig:data-validation-error}
 \end{figure}
 
 \subsection{Pipeline treningowy}
 
-Główny workflow \texttt{training-data-pipeline.yaml} składa się z ośmiu jobów. Joby 1--3 wykonywane są sekwencyjnie. Po zakończeniu treningu workflow rozgałęzia się: gdy model się nie poprawił, uruchamia się \texttt{stop-infra} (job 4); gdy model się poprawił --- równolegle uruchamiają się \texttt{deploy} (job 5) i \texttt{create-pr} (job 7). Job 6 zatrzymuje EC2 po wdrożeniu, a job 8 finalizuje scalenie.
+Główny workflow \texttt{training-data-pipeline.yaml} składa się z ośmiu jobów. Joby 1--3 wykonywane są sekwencyjnie. Po zakończeniu treningu workflow rozgałęzia się w zależności od wyniku bramki jakości: jeśli model nie poprawił metryk, uruchamia się \texttt{stop-infra} (job~4) i pipeline kończy działanie. Jeśli model się poprawił, joby \texttt{deploy} (job~5) i \texttt{create-pr} (job~7) uruchamiają się równolegle i wzajemnie się nie blokują. Priorytety są celowe: dodanie ulepszonego modelu i scalenie z \texttt{main} jest ważniejsze niż wdrożenie, dlatego ewentualna awaria wdrożenia nie blokuje propagacji zatwierdzonego zbioru do repozytorium. Wdrożenie można w każdej chwili ponowić przez workflow \texttt{release-deploy.yaml} lub \texttt{deploy-model.yaml}. Job~6 zatrzymuje EC2 po wdrożeniu, a job~8 finalizuje scalenie pull requesta.
 
 \begin{figure}[H]
     \centering
