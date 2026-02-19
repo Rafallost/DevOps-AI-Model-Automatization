@@ -56,7 +56,7 @@ Kluczowe koncepcje Gita:
   \item \textbf{Commit} --- migawka stanu repozytorium w danym momencie wraz z metadanymi (autor, czas, wiadomość),
   \item \textbf{Branch} --- niezależna linia rozwoju; umożliwia pracę nad funkcjonalnością bez wpływu na gałąź główną,
   \item \textbf{Merge / Pull Request} --- scalenie zmian z jednej gałęzi do drugiej, zazwyczaj poprzedzone przeglądem kodu,
-  \item \textbf{Hook} --- skrypt uruchamiany automatycznie w odpowiedzi na zdarzenie Gita (np. \texttt{pre-push}).
+  \item \textbf{Hook} --- skrypt wywoływany automatycznie przez zdarzenie Git (np. \texttt{pre-push}).
 \end{itemize}
 
 GitHub to platforma hostingowa dla repozytoriów Git, rozbudowana o funkcje współpracy zespołowej: pull requesty, przeglądy kodu, zarządzanie zadaniami oraz zintegrowane CI/CD w postaci GitHub Actions. W kontekście niniejszego projektu GitHub pełni rolę centralnego punktu integracji. Każda zmiana przechodzi przez repozytorium i może automatycznie uruchamiać kolejne etapy pipeline'u.
@@ -67,7 +67,7 @@ GitHub Actions to platforma automatyzacji wbudowana w GitHub, pozwalająca defin
 
 Podstawowe pojęcia:
 \begin{itemize}
-  \item \textbf{Workflow} --- zestaw automatycznych zadań zdefiniowany w pliku \texttt{.github/workflows/*.yaml},
+  \item \textbf{Workflow} --- zestaw automatycznych zadań zdefiniowany w pliku \path{.github/workflows/*.yaml},
   \item \textbf{Job} --- jednostka wykonania złożona z kroków (steps); domyślnie uruchamiana równolegle z innymi jobami,
   \item \textbf{Step} --- pojedyncza operacja w ramach joba: wywołanie skryptu lub gotowej akcji,
   \item \textbf{Runner} --- maszyna wykonująca joba; może być zarządzana przez GitHub (hosted) lub przez użytkownika (self-hosted),
@@ -82,7 +82,7 @@ Docker to platforma do tworzenia, dystrybucji i uruchamiania aplikacji w kontene
 
 Kluczowe pojęcia:
 \begin{itemize}
-  \item \textbf{Obraz (image)} --- niezmienialny szablon opisujący środowisko, definiowany plikiem \texttt{Dockerfile},
+  \item \textbf{Obraz (image)} --- niezmienny szablon środowiska definiowany plikiem \texttt{Dockerfile},
   \item \textbf{Kontener} --- działająca instancja obrazu; izolowana od systemu hosta i innych kontenerów,
   \item \textbf{Rejestr (registry)} --- repozytorium obrazów (np. Docker Hub, Amazon ECR).
 \end{itemize}
