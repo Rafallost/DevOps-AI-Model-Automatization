@@ -1,64 +1,26 @@
 \section{Podsumowanie i wnioski}
 \label{sec:Podsumowanie}
 
-\subsection{Realizacja celów pracy}
+\subsection{Efektywność automatyzacji}
 
-Niniejsza praca stawiała sobie za cel zaprojektowanie, implementację i ocenę zautomatyzowanego pipeline CI/CD dla modeli uczenia maszynowego. Poniżej zestawiono cele sformułowane we wprowadzeniu z oceną stopnia ich realizacji.
+Celem niniejszej pracy było zaprojektowanie, wdrożenie i ocena zautomatyzowanego pipeline CI/CD dla modeli uczenia maszynowego, a następnie porównanie tego podejścia z tradycyjnym, ręcznym procesem ponownego uczenia i wdrażania modeli AI. Zrealizowany system objął pełny cykl życia modelu: od dostarczenia nowych danych treningowych za pośrednictwem polecenia \texttt{git push}, przez walidację danych, trening i ocenę jakości, aż po wdrożenie modelu w postaci serwisu REST API dostępnego dla użytkowników zewnętrznych. W toku eksperymentów model U-Net przeszedł przez sześć iteracji doskonalenia sterowanych pipeline'em, osiągając współczynnik Dice równy 0{,}81 oraz IoU równy 0{,}74, przy czym każda iteracja była inicjowana wyłącznie przez dostarczenie nowych danych treningowych, bez jakiejkolwiek ręcznej ingerencji w przebieg procesu.
 
-\begin{itemize}
-  \item \textbf{Zaprojektowanie architektury systemu automatyzacji} --- cel osiągnięty w pełni. Zaprojektowano i zaimplementowano architekturę opartą na GitHub Actions, EC2 z k3s, MLflow i DVC, szczegółowo opisaną w rozdziale 3. Architektura spełnia wymagania powtarzalności, automatyzmu i kontroli kosztów.
+Wyniki przeprowadzonego eksperymentu ilościowego potwierdzają przewagę podejścia zautomatyzowanego w zakresie efektywności operacyjnej. Nakład pracy człowieka uległ redukcji z około 5 godzin w podejściu manualnym do poniżej jednej minuty na cykl wdrożenia, przy koszcie obliczeniowym rzędu \$0{,}29 za jedną sesję treningową na instancji EC2 \texttt{t3.large}. Łączny koszt realizacji projektu wyniósł około \$20 przy zakładanym budżecie \$50, co stanowi potwierdzenie skuteczności zastosowanej architektury stop/start, w której zasoby obliczeniowe uruchamiane są wyłącznie na czas treningu.
 
-  \item \textbf{Implementacja pipeline CI/CD integrującego walidację danych, trening i wdrożenie} --- cel osiągnięty w pełni. Pipeline \texttt{training-data-pipeline.yaml} automatycznie pobiera dane z S3, waliduje je, trenuje model, ocenia jakość i wdraża lub odrzuca nową wersję. Całość uruchamia się po wykonaniu \texttt{git push} bez dalszej ingerencji użytkownika.
+\subsection{Porównanie mocnych i słabych stron obu podejść}
 
-  \item \textbf{Wprowadzenie obiektywnej bramki jakości opartej na metrykach ML} --- cel osiągnięty w pełni. Bramka jakości dynamicznie pobiera metryki aktualnej wersji produkcyjnej z rejestru MLflow i porównuje je z nowym modelem. Pull request tworzony jest wyłącznie w przypadku jednoczesnej poprawy współczynnika Dice i IoU, co eliminuje ryzyko regresji.
+Podejście zautomatyzowane eliminuje szereg ryzyk nieodłącznie związanych z procesem manualnym. Dynamiczna bramka jakości, porównująca nowy model z aktualną wersją produkcyjną zarejestrowaną w MLflow, wyklucza możliwość awansowania modelu o niższej jakości zarówno wskutek przeoczenia, jak i pod wpływem presji operacyjnej. Wersjonowanie danych za pomocą DVC \cite{dvc_docs} w połączeniu z rejestrem modeli MLflow zapewnia pełną odtwarzalność eksperymentów: dla każdej wersji modelu możliwe jest precyzyjne wskazanie zbioru danych oraz parametrów użytych podczas treningu, co w podejściu manualnym nie może być zagwarantowane w sposób systematyczny. Istotną właściwością systemu jest również skalowalność: wzrost rozmiaru zbioru danych nie generuje dodatkowego nakładu pracy inżyniera, gdyż całość obciążenia obliczeniowego przejmuje infrastruktura chmurowa.
 
-  \item \textbf{Porównanie podejścia ręcznego z zautomatyzowanym} --- cel osiągnięty. Porównanie przedstawione w sekcji \ref{sec:Analiza_wynikow} wykazuje redukcję nakładu pracy człowieka z $\sim$5 h do poniżej jednej minuty przy każdym cyklu wdrożenia przy zachowaniu pełnej powtarzalności procesu.
+Podejście manualne zachowuje natomiast pewne zalety. Nie wymaga ponoszenia jednorazowego kosztu konfiguracji, który w przypadku niniejszego projektu wyniósł kilka tygodni pracy, oraz cechuje się większą elastycznością w sytuacjach nieprzewidzianych przez zdefiniowany pipeline. Pozostaje ono uzasadnioną opcją w wąskich scenariuszach: przy bardzo rzadkich aktualizacjach modelu, małym zbiorze danych oraz przy braku wymagań dotyczących powtarzalności lub audytowalności procesu. Poza tym scenariuszem koszt wdrożenia automatyzacji zwraca się po kilkunastu cyklach, a każde kolejne uruchomienie generuje oszczędność rzędu kilku godzin pracy inżyniera \cite{humble2010continuous}.
 
-  \item \textbf{Realizacja w ramach budżetu AWS Academy ($\sim$\$50)} --- cel osiągnięty. Łączny koszt projektu wyniósł $\sim$\$20. Kluczową rolę odegrała architektura stop/start instancji EC2 oraz rezygnacja z kosztownych serwisów zarządzanych (EKS, RDS, NAT Gateway).
-\end{itemize}
+Słabą stroną zrealizowanego systemu, wynikającą ze świadomych decyzji projektowych podyktowanych ograniczeniami środowiska AWS Academy, jest architektura oparta na pojedynczym węźle: klaster k3s uruchomiony na jednej instancji EC2 nie zapewnia wysokiej dostępności, a awaria tej instancji skutkuje niedostępnością zarówno API modelu, jak i rejestru MLflow. Ograniczenia środowiska laboratoryjnego wymusiły ponadto ręczną rotację tymczasowych kluczy dostępowych AWS przy każdym odnowieniu sesji laboratoryjnej oraz uniemożliwiły wdrożenie federacji tożsamości OIDC dla GitHub Actions. W środowisku produkcyjnym obydwa te problemy zostałyby wyeliminowane przez standardowe mechanizmy zarządzania tożsamością IAM oraz wielowęzłowy klaster Kubernetes \cite{kreuzberger2023mlops}.
 
-\subsection{Wnioski}
+\subsection{Obszary optymalizacji}
 
-Na podstawie przeprowadzonych eksperymentów i obserwacji sformułowano wnioski odnoszące się do obu pytań badawczych postawionych we wstępie pracy. Kontekst porównawczy oparty jest na literaturze z zakresu DevOps \cite{humble2010continuous} oraz MLOps \cite{kreuzberger2023mlops}.
+Przeprowadzona implementacja wskazuje jednocześnie obszary, których rozbudowa przyniosłaby wymierne korzyści operacyjne. Najbardziej perspektywicznym kierunkiem jest rozszerzenie automatycznych testów jakości modelu poza metryki Dice i IoU o miary efektywności obliczeniowej: czas inferencji, zużycie pamięci operacyjnej oraz zachowanie modelu na danych brzegowych. Uzupełnienie bramki jakości o te kryteria pozwoliłoby wykrywać regresje nieodzwierciedlone w metrykach segmentacji. Zasadne byłoby również automatyczne generowanie raportów porównawczych przy każdym pull requeście, zawierających zestawienie wizualizacji predykcji obok siebie, nie tylko wartości liczbowych metryk.
 
-\begin{enumerate}
+Zrealizowany monitoring oparty na Prometheus i Grafanie obejmuje metryki operacyjne działającego serwisu, natomiast nie uwzględnia zjawiska dryfu danych. Wdrożenie mechanizmu analizującego rozkład statystyczny napływających danych produkcyjnych w odniesieniu do danych treningowych umożliwiłoby automatyczne sygnalizowanie momentu, w którym model wymaga ponownego uczenia na zaktualizowanym zbiorze, domykając pętlę sprzężenia zwrotnego między środowiskiem produkcyjnym a procesem uczenia. Rozważenia wymaga również zastąpienie obecnego podejścia natychmiastowej podmiany modelu mechanizmem stopniowego wdrożenia z automatycznym wycofaniem zmian w przypadku pogorszenia metryk produkcyjnych, co dodatkowo ograniczyłoby ryzyko regresji niezidentyfikowanej przez bramkę jakości.
 
-  \item \textbf{Automatyczne uczenie i wdrażanie modelu AI jest technicznie wykonalne i przynosi wymierną poprawę jakości.}
-  W toku projektu model U-Net przeszedł przez sześć iteracji doskonalenia sterowanych pipeline'em, poprawiając współczynnik Dice z wartości bliskich zeru do 0{,}81. Każda iteracja była wyzwalana wyłącznie przez \texttt{git push} z nowymi danymi treningowymi, bez ręcznej ingerencji w proces treningu ani oceny. Potwierdza to, że zautomatyzowany cykl uczenia modelu dostarczonego przez zewnętrzny zespół jest nie tylko możliwy, ale skuteczny jakościowo.
+\subsection{Podsumowanie}
 
-  \item \textbf{Automatyzacja z narzędziami DevOps jest zdecydowanie korzystniejsza od podejścia manualnego poza wąskim scenariuszem rzadkich aktualizacji.}
-  Nakład inżyniera zmniejszył się z $\sim$5 h do poniżej jednej minuty na cykl wdrożenia, przy koszcie obliczeniowym rzędu $\sim$\$0{,}29 za jeden trening. Podejście ręczne zachowuje uzasadnienie ekonomiczne wyłącznie przy bardzo rzadkich aktualizacjach modelu, małym zbiorze danych i braku wymagań co do powtarzalności. We wszystkich pozostałych scenariuszach jednorazowy koszt konfiguracji zwraca się po kilkunastu cyklach, a skala korzyści rośnie wraz z częstotliwością wdrożeń i rozmiarem danych.
-
-  \item \textbf{Obiektywna bramka jakości i wersjonowanie danych eliminują ryzyka charakterystyczne dla podejścia manualnego.}
-  Dynamiczne porównanie nowego modelu z aktualną wersją produkcyjną w MLflow wyklucza zarówno przypadkowe cofnięcie jakości, jak i zatwierdzenie modelu pod presją czasową. Wersjonowanie danych za pomocą DVC \cite{dvc_docs} zapewnia pełną odtwarzalność eksperymentów: dla każdej wersji modelu można precyzyjnie wskazać zbiór danych użyty do treningu. Są to właściwości, których podejście ręczne nie jest w stanie zagwarantować w sposób systematyczny.
-
-  \item \textbf{Zbudowana infrastruktura tworzy kompletną platformę od automatycznego treningu do obsługi klienta końcowego.}
-  Stos technologiczny oparty na k3s, Helm, Dockerze i EC2 stanowi pełne środowisko produkcyjne: model zarejestrowany w MLflow jest automatycznie pobierany i udostępniany przez endpoint REST API dostępny dla użytkowników zewnętrznych. Architektura stop/start instancji kontroluje koszty, uruchamiając zasoby obliczeniowe wyłącznie na czas treningu. Ta sama platforma, która zarządza cyklem życia modelu, dostarcza jednocześnie gotowy mechanizm jego dystrybucji, zamykając pełny łańcuch wartości: od danych do klienta.
-
-\end{enumerate}
-
-\medskip
-\noindent\textbf{Podsumowanie końcowe.} Niniejsza praca potwierdza, że zastosowanie technik DevOps w procesie automatycznego trenowania i wersjonowania modeli AI jest zarówno technicznie wykonalne, jak i ekonomicznie uzasadnione. Zrealizowany system odpowiada pozytywnie na oba pytania badawcze: automatyzacja cyklu życia modelu jest możliwa przy ograniczonym budżecie i przynosi wymierne korzyści jakościowe, a jej przewaga nad podejściem manualnym jest jednoznaczna we wszystkich scenariuszach wymagających regularnych aktualizacji modelu. Zaprojektowana architektura, oparta na ogólnodostępnych narzędziach open-source i zarządzanej infrastrukturze chmurowej, może być bezpośrednio przeniesiona na inne typy modeli i zadań uczenia maszynowego, stanowiąc gotowy wzorzec automatyzacji MLOps w środowisku produkcyjnym.
-
-\subsection{Ograniczenia}
-
-Projekt realizowany był jako proof of concept z następującymi świadomymi ograniczeniami:
-
-\begin{itemize}
-  \item \textbf{Budżet AWS Academy} --- sesje laboratoryjne wygasają co 4 godziny, IAM role mają ograniczone uprawnienia (m.in.\ brak \texttt{s3:PutObject} dla lokalnych poświadczeń). Wymusiło to przeniesienie wszystkich operacji S3 do GitHub Actions.
-  \item \textbf{Single-node k3s} --- brak wysokiej dostępności. Awaria instancji EC2 powoduje niedostępność całego systemu.
-  \item \textbf{Mały zbiór danych} --- eksperyment przeprowadzono na zbiorze 359 obrazów. Zachowanie systemu przy znacznie większych zbiorach (powyżej 1000 obrazów) nie było testowane; szacunki w tabeli~\ref{tab:skalowanie} mają charakter ekstrapolacyjny.
-  \item \textbf{Jeden model} --- architektura jest zaprojektowana pod konkretny model (U-Net dla segmentacji). Generalizacja na inne typy modeli wymagałaby modyfikacji skryptów walidacji i bramki jakości.
-\end{itemize}
-
-\subsection{Kierunki dalszego rozwoju}
-
-System stanowi solidną bazę, którą można rozbudować w kilku kierunkach:
-
-\begin{itemize}
-  \item \textbf{Multi-node Kubernetes} --- zastąpienie single-node k3s klastrem zapewniającym wysoką dostępność i możliwość skalowania poziomego.
-  \item \textbf{Experiment tracking} --- rozbudowa wykorzystania MLflow o śledzenie hiperparametrów i automatyczne porównywanie wielu eksperymentów.
-  \item \textbf{Data drift monitoring} --- dodanie mechanizmu wykrywającego rozbieżność między danymi treningowymi a produkcyjnymi.
-  \item \textbf{A/B testing} --- wdrożenie mechanizmu stopniowego rollout nowej wersji modelu z automatycznym rollback przy pogorszeniu metryk.
-  \item \textbf{Generalizacja} --- abstrakcja pipeline pod inne typy modeli i zadań ML, nie tylko segmentację obrazów.
-\end{itemize}
+Przeprowadzone badanie potwierdza, że zastosowanie technik DevOps i MLOps do automatyzacji procesu ponownego uczenia i wdrażania modeli AI jest technicznie wykonalne w ramach ograniczonego budżetu akademickiego oraz ekonomicznie uzasadnione już przy niewielkiej skali operacji. Automatyzacja nie tylko redukuje nakład pracy, lecz zmienia jej charakter: rola inżyniera ewoluuje od wykonawcy powtarzalnych czynności ku projektantowi procesu zarządzanego przez zautomatyzowaną infrastrukturę. Podejście manualne, choć prostsze w uruchomieniu, nie skaluje się wraz z rosnącą częstotliwością aktualizacji ani z powiększającym się zbiorem danych: ryzyko błędu kumuluje się z każdą iteracją, a czas i koszt rosną proporcjonalnie do rozmiaru danych i liczby wdrożeń. Zaprojektowana architektura, oparta wyłącznie na narzędziach open-source i standardowej infrastrukturze chmurowej, może zostać przeniesiona na inne typy modeli i zadania uczenia maszynowego przy minimalnych modyfikacjach skryptów walidacji i bramki jakości, stanowiąc empirycznie zweryfikowany wzorzec automatyzacji MLOps możliwy do zastosowania w środowisku produkcyjnym.
