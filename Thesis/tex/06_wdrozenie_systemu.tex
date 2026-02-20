@@ -6,7 +6,7 @@ Rozdział opisuje infrastrukturę, na której działa system, sposób jej konfig
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/C4Deployment.png}
-  \caption{Diagram wdrożenia systemu --- konkretne zasoby AWS, adresy i porty.}
+  \caption{Diagram wdrożenia systemu --- konkretne zasoby AWS, adresy i porty}
   \label{fig:deployment-diagram}
 \end{figure}
 
@@ -38,7 +38,7 @@ Infrastruktura uruchamiana jest jednorazowo poleceniem \texttt{terraform apply} 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/terraform_apply.png}
-  \caption{Wynik polecenia \texttt{terraform apply} --- lista 12 utworzonych zasobów AWS.}
+  \caption{Wynik polecenia \texttt{terraform apply} --- lista 12 utworzonych zasobów AWS}
   \label{fig:terraform-apply}
 \end{figure}
 
@@ -47,14 +47,14 @@ Rysunki~\ref{fig:aws-ec2} i~\ref{fig:aws-s3} przedstawiają odpowiednio instancj
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/aws_ec2_console.png}
-  \caption{Instancja EC2 \texttt{wms-k3s} w konsoli AWS.}
+  \caption{Instancja EC2 \texttt{wms-k3s} w konsoli AWS}
   \label{fig:aws-ec2}
 \end{figure}
 \vspace{-30pt}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/aws_s3_buckets.png}
-  \caption{Zasobniki S3: \texttt{wms-dvc-data-*} dla danych treningowych i \texttt{wms-mlflow-artifacts-*} dla artefaktów.}
+  \caption{Zasobniki S3: \texttt{wms-dvc-data-*} dla danych treningowych i \texttt{wms-mlflow-artifacts-*} dla artefaktów}
   \label{fig:aws-s3}
 \end{figure}
 \vspace{5pt}
@@ -93,7 +93,7 @@ Rysunek~\ref{fig:systemctl-status} potwierdza poprawne działanie usług systemd
 \begin{figure}[H]
  \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/systemctl_status.png}
-  \caption{Stan usług \texttt{mlflow} i \texttt{actions.runner} w systemd --- obie usługi aktywne.}
+  \caption{Stan usług \texttt{mlflow} i \texttt{actions.runner} w systemd --- obie usługi aktywne}
   \label{fig:systemctl-status}
 \end{figure}
 
@@ -109,7 +109,7 @@ Interfejs MLflow dostępny jest pod adresem \texttt{http://100.50.251.97:5000} (
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/mlflow_ui.png}
- \caption{Interfejs MLflow (\texttt{http://100.50.251.97:5000}) --- lista eksperymentów i przebiegów treningowych z metrykami.}
+ \caption{Interfejs MLflow (\texttt{http://100.50.251.97:5000}) --- lista eksperymentów i przebiegów treningowych z metrykami}
  \label{fig:mlflow-ui}
 \end{figure}
 
@@ -144,7 +144,7 @@ Ruch przychodzący na porty 5000, 30080, 30300 i 30900 jest dozwolony z dowolneg
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/security_groups.png}
-  \caption{Security Group instancji EC2 --- reguły ruchu przychodzącego z otwartymi portami usług.}
+  \caption{Security Group instancji EC2 --- reguły ruchu przychodzącego z otwartymi portami usług}
   \label{fig:security-group}
 \end{figure}
 
@@ -213,7 +213,7 @@ Po wdrożeniu API jest dostępne pod adresem \texttt{http://100.50.251.97:30080}
 \begin{figure}[H]
  \centering
  \includegraphics[width=0.9\linewidth]{img/06_wdrozenie_systemu/ecr_repository.png}
- \caption{Repozytorium \texttt{wms-model} w Amazon ECR z obrazami oznaczonymi hashiem commita.}
+ \caption{Repozytorium \texttt{wms-model} w Amazon ECR z obrazami oznaczonymi hashiem commita}
  \label{fig:ecr-repo}
 \end{figure}
 
@@ -224,17 +224,17 @@ Dostępne endpointy API to \texttt{/health} (status usługi), \texttt{/predict} 
   \begin{subfigure}[t]{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/api_health.png}
-    \caption{Odpowiedź endpointu \texttt{/health} wdrożonego API modelu.}
+    \caption{Odpowiedź endpointu \texttt{/health} wdrożonego API modelu}
     \label{fig:api-health}
   \end{subfigure}
   \hfill
   \begin{subfigure}[t]{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/metrics_short.png}
-    \caption{Metryki Prometheus eksponowane pod adresem \texttt{/metrics}: liczba predykcji, czasy odpowiedzi i błędy.}
+    \caption{Metryki Prometheus eksponowane pod adresem \texttt{/metrics}: liczba predykcji, czasy odpowiedzi i błędy}
     \label{fig:metrics}
   \end{subfigure}
-  \caption{Endpointy diagnostyczne API modelu.}
+  \caption{Endpointy diagnostyczne API modelu}
   \label{fig:api-endpoints}
 \end{figure}
 
@@ -263,14 +263,14 @@ Działanie stosu monitorowania ilustruje dashboard Grafana (rys.~\ref{fig:grafan
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/prometheus_targets.png}
- \caption{Strona \textit{Targets} w Prometheus (\texttt{:30900}) --- endpoint \texttt{/metrics} API w stanie \texttt{UP}.}
+ \caption{Strona \textit{Targets} w Prometheus (\texttt{:30900}) --- endpoint \texttt{/metrics} API w stanie \texttt{UP}}
  \label{fig:prometheus-targets}
 \end{figure}
 
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/grafana_dashboard.png}
- \caption{Dashboard Grafana (\texttt{http://100.50.251.97:30300}) --- metryki działającego API modelu.}
+ \caption{Dashboard Grafana (\texttt{http://100.50.251.97:30300}) --- metryki działającego API modelu}
  \label{fig:grafana-dashboard}
 \end{figure}
 
@@ -293,7 +293,7 @@ Jest to zalecany sposób korzystania z systemu dla operatora chcącego uruchomi�
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/deployed_app.png}
-  \caption{Działający interfejs webowy API modelu: segmentacja trzech zdjęć wodomierzy z wygenerowanymi maskami i zmierzoną latencją predykcji.}
+  \caption{Działający interfejs webowy API modelu: segmentacja trzech zdjęć wodomierzy z wygenerowanymi maskami i zmierzoną latencją predykcji}
   \label{fig:deployed-app}
 \end{figure}
 

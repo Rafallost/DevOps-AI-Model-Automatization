@@ -20,7 +20,7 @@ Całość wykonuje się w mniej niż 10 sekund, ponieważ hook nie wymaga połą
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/hook.png}
-  \caption{Wynik wypchania nowych danych na gałąź \texttt{data/TIMESTAMP}.}
+  \caption{Wynik wypchania nowych danych na gałąź \texttt{data/TIMESTAMP}}
 \end{figure}
 
 Po zakończeniu działania hooka Git wyświetla komunikat \texttt{error: failed to push some refs}. Jest to zachowanie oczekiwane, nie błąd. Hook celowo kończy się kodem niezerowym, aby zablokować oryginalny push do \texttt{main}. Dane zostały już pomyślnie wypchnięte na gałąź \texttt{data/TIMESTAMP} i GitHub Actions może przejąć kontrolę.
@@ -132,7 +132,7 @@ Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr mer
 \begin{figure}[H]
     \centering
     \includegraphics[width=1.0\linewidth]{img/05_pipline_ci_cd/successfull_training.png}
-    \caption{Udany przebieg pipeline CI/CD z automatycznym wdrożeniem nowej wersji modelu.}
+    \caption{Udany przebieg pipeline CI/CD z automatycznym wdrożeniem nowej wersji modelu}
     \label{fig:workflow-success}
 \end{figure}
 
@@ -162,7 +162,7 @@ Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w 
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/not_improved_model.png}
-    \caption{Przykład z nieudanego przebiegu pipeline CI/CD --- model nie spełnia kryteriów bramki jakości.}
+    \caption{Przykład z nieudanego przebiegu pipeline CI/CD --- model nie spełnia kryteriów bramki jakości}
     \label{fig:workflow-not-improved}
 \end{figure}
 
@@ -170,12 +170,12 @@ Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w 
  \centering
  \begin{minipage}{0.48\linewidth}
    \includegraphics[width=0.8\linewidth]{img/05_pipline_ci_cd/not_improved_model_gate.png}
-   \caption{Wynik bramki jakości --- model nie spełnił kryteriów, więc nie został wdrożony.}
+   \caption{Wynik bramki jakości --- model nie spełnił kryteriów, więc nie został wdrożony}
    \label{fig:quality-gate-not-improved}
  \end{minipage}\hfill
  \begin{minipage}{0.48\linewidth}
    \includegraphics[width=\linewidth]{img/05_pipline_ci_cd/not_improved_model_summary.png}
-   \caption{Podsumowanie metryk modelu, który nie spełnił kryteriów bramki jakości.}
+   \caption{Podsumowanie metryk modelu, który nie spełnił kryteriów bramki jakości}
    \label{fig:not-improved-model-summary}
  \end{minipage}
 \end{figure}
