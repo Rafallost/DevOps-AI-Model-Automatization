@@ -152,11 +152,11 @@ versions = client.get_latest_versions(
 \end{verbatim}
 
 \paragraph{Logika decyzyjna}\mbox{}\\
-Model jest uznany za ulepszony, jeśli obie metryki walidacyjne są wyższe od baseline:
+Model jest uznany za ulepszony, jeśli obie metryki ze zbioru testowego --- wyznaczone na najlepszym zapisanym modelu po zakończeniu treningu --- są wyższe od baseline:
 
 \begin{itemize}
-  \item \texttt{val\_dice > baseline\_dice}
-  \item \texttt{val\_iou > baseline\_iou}
+  \item \texttt{final\_test\_dice > baseline\_dice}
+  \item \texttt{final\_test\_iou > baseline\_iou}
 \end{itemize}
 
 Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w MLflow i archiwizuje poprzednią wersję. Wynik jest przekazywany jako output do GitHub Actions (\texttt{echo "improved=true" >> \$GITHUB\_OUTPUT}).

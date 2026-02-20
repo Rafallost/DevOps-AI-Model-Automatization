@@ -11,17 +11,17 @@ Projektując system, kierowano się pięcioma celami:
   \item \textbf{Pełna automatyzacja} --- użytownik jedynie będzie używać \texttt{git push} lub uruchamiać aplikacje; walidacja, trening, ocena jakości i wdrożenie odbywają się bez interwencji.
   \item \textbf{Reprodukowalność} --- każda wersja modelu musi być powiązana z wersją kodu, wersją danych i zapisanymi metrykami.
   \item \textbf{Kontrola kosztów} --- projekt realizowany w ramach konta AWS Academy z budżetem ~50~USD; zasoby uruchamiane tylko gdy potrzebne.
-  \item \textbf{Kontrola czasu} --- trening nie może przekraczać 2,5~h, aby zmieścić się w 4-godzinnym oknie sesji laboratorium AWS.
+  \item \textbf{Kontrola czasu} --- całkowity pipeline nie powinien przekraczać 4-godzinnego okna sesji laboratorium AWS; szacowany czas samego treningu wynosił ok.~2,5~h, rzeczywisty czas treningu wyniósł ok.~3~h.
   \item \textbf{Porównywalność} --- system musi być zbudowany w sposób umożliwiający zebranie wymieranych danych w celu porównania z podejściem manualnym.
 \end{enumerate}
 
 Ograniczenia budżetowe wykluczyły usługi o wysokim koszcie stałym: EKS (~\$150/mies.), RDS (~\$30/mies.), NAT Gateway (~\$32/mies.) i ALB (~\$18/mies.) --- zastąpione przez k3s na EC2, SQLite i NodePort.
 
-Dodatkowym ograniczeniem środowiska AWS Academy jest brak możliwości tworzenia ról IAM oraz konfiguracji federacji tożsamości OIDC. Mechanizmów, które w standardowych środowiskach produkcyjnych pozwalają GitHub Actions uwierzytelniać się w AWS bez przechowywania długoterminowych kluczy. W konsekwencji tymczasowe klucze sesji (generowane przy każdym uruchomieniu laboratorium) przechowywane są jako zaszyfrowane sekrety repozytorium GitHub i wstrzykiwane do zmiennych środowiskowych workflow podczas każdego uruchomienia \cite{github_actions_docs}. Sekrety są rotowane ręcznie przy każdym odnowieniu sesji, co stanowi kompromis akceptowalny w kontekście projektu badawczego (rysunek~\ref{fig:github-secrets}).
+Dodatkowym ograniczeniem środowiska AWS Academy jest brak możliwości konfiguracji federacji tożsamości OIDC --- mechanizmu, który w standardowych środowiskach produkcyjnych pozwala GitHub Actions uwierzytelniać się w AWS bez przechowywania długoterminowych kluczy (role IAM przypisane do instancji EC2 są dozwolone, natomiast OIDC dla zewnętrznych systemów CI/CD jest niedostępne). W konsekwencji tymczasowe klucze sesji (generowane przy każdym uruchomieniu laboratorium) przechowywane są jako zaszyfrowane sekrety repozytorium GitHub i wstrzykiwane do zmiennych środowiskowych workflow podczas każdego uruchomienia \cite{github_actions_docs}. Sekrety są rotowane ręcznie przy każdym odnowieniu sesji, co stanowi kompromis akceptowalny w kontekście projektu badawczego (rysunek~\ref{fig:github-secrets}).
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.8\linewidth]{img/03_architektura_systemu/github_secrets.png}
+  \includegraphics[width=0.9\linewidth]{img/03_architektura_systemu/github_secrets.png}
   \caption{Konfiguracja sekretów GitHub Actions przechowujących tymczasowe poświadczenia AWS}
   \label{fig:github-secrets}
 \end{figure}
@@ -143,61 +143,61 @@ Tabela~\ref{tab:decisions} zestawia najważniejsze decyzje projektowe podjęte p
 \endlastfoot
 Orchestracja kontenerów
   & k3s na EC2
-  & EKS jest ~15$\times$ droższy; k3s wystarcza dla jednego węzła \\
+  & k3s jest w zupełności wystarczający dla jednego węzła. EKS jest ~15$\times$ droższy. \\
 \addlinespace
 Backend MLflow
   & SQLite
-  & RDS ~\$30/mies.; SQLite jest wystarczający dla małego projektu; dane Meta przechowywane na EC2 \\
+  & RDS kosztuje ~\$30/mies. SQLite jest wystarczający dla małego projektu, a metadane przechowywane są lokalnie na EC2. \\
 \addlinespace
 Dostęp do API
   & NodePort 30080
-  & Load Balancer ~\$18/mies.; publiczny adres IP EC2 z Elastic IP jest wystarczający \\
+  & Load Balancer kosztuje ~\$18/mies. Publiczny adres IP EC2 z Elastic IP jest wystarczający. \\
 \addlinespace
 Typ instancji EC2
   & t3.large (8~GB RAM)
-  & t3.small/medium: crash OOM przy pobieraniu obrazu PyTorch 8,69~GB; t3.large jest minimum \\
+  & Na t3.small i t3.medium pobieranie obrazu PyTorch (8,69~GB) kończyło się awarią OOM. \\
 \addlinespace
 Stop/start EC2
   & Automatyczny po każdym pipeline
-  & EC2 działa tylko ~3--4~h na uruchomienie; oszczędność ~80\% kosztów vs. ciągłe działanie \\
+  & EC2 działa tylko ~3--4~h na jedno uruchomienie. Daje to oszczędność ~80\% kosztów w porównaniu z ciągłym działaniem. \\
 \addlinespace
 Dane treningowe w Git
   & Tylko metadane DVC
-  & Duże pliki binarne spowalniają Git i przekraczają limity; S3 jest tańszy i skalowalny \\
+  & Duże pliki binarne spowalniają Git i przekraczają jego limity rozmiaru. S3 jest tańszy i skalowalny. \\
 \addlinespace
 Trening przed PR
   & Trening $\rightarrow$ PR (jeśli lepszy)
-  & PR tworzony przez bota nie wyzwala innych workflow (ograniczenie GitHub); kolejność eliminuje problem \\
+  & GitHub nie uruchamia workflow wywołanych przez PR tworzony automatycznie z \texttt{GITHUB\_TOKEN}. Uruchomienie treningu przed utworzeniem PR eliminuje tę zależność. \\
 \addlinespace
 Baseline bramki jakości
   & Dynamiczny z MLflow
-  & Hardkodowany baseline staje się nieaktualny po każdym treningu; MLflow zawsze zna aktualny Production \\
+  & Hardkodowany baseline staje się nieaktualny po każdym treningu. MLflow zawsze przechowuje metryki aktualnego modelu Production. \\
 \addlinespace
 IAM dla GitHub Actions
   & Tymczasowe klucze sesji
-  & AWS Academy zabrania tworzenia ról IAM; OIDC niedostępne; klucze rotowane ręcznie \\
+  & Konfiguracja OIDC dla zewnętrznych systemów CI/CD jest niedostępna w AWS Academy. EC2 Instance Profile jest dozwolony. Klucze GitHub Actions są rotowane ręcznie przy nowej sesji. \\
 \addlinespace
 Scalanie danych treningowych
   & GitHub Actions
-  & Eliminuje konieczność lokalnych poświadczeń AWS u każdego dewelopera; hook \texttt{pre-push} tworzy jedynie gałąź danych ($<$10~s) bez dostępu do S3 \\
+  & Eliminuje konieczność posiadania lokalnych poświadczeń AWS przez każdego dewelopera. Hook \texttt{pre-push} tworzy jedynie gałąź danych w czasie poniżej 10~s, bez dostępu do S3. \\
 \addlinespace
 Framework serwowania API
   & FastAPI + Uvicorn
-  & Asynchroniczne I/O, automatyczna dokumentacja OpenAPI; Flask synchroniczny; TorchServe nadmiarowy dla jednego modelu \\
+  & FastAPI oferuje asynchroniczne I/O i automatyczną dokumentację OpenAPI. Flask jest synchroniczny, a TorchServe byłby nadmiarowy dla obsługi jednego modelu. \\
 \addlinespace
 Metryki działania API
   & Prometheus client
-  & Prometheus i Grafana wbudowane w stos k3s; CloudWatch generuje dodatkowe koszty; bezpłatna integracja \\
+  & Prometheus i Grafana są wbudowane w stos k3s i nie generują dodatkowych kosztów. CloudWatch jest płatnym serwisem AWS. \\
 \addlinespace
 Obraz bazowy Docker
   & \texttt{python:3.12-slim}
-  & Mniejszy rozmiar niż \texttt{python:3.12}; zależności systemowe (\texttt{libgl1}, \texttt{libglib2.0}) dodane explicite, co czyni je widocznymi i reprodukowalnymi \\
+  & Obraz \texttt{slim} jest mniejszy od pełnego \texttt{python:3.12}. Zależności systemowe (\texttt{libgl1}, \texttt{libglib2.0}) dodane explicite są widoczne i reprodukowalne. \\
 \addlinespace
 Artefakty MLflow
   & Amazon S3
-  & Lokalny dysk EC2 jest ulotny po zatrzymaniu instancji; S3 zapewnia trwałość modeli i logów niezależnie od cyklu stop/start \\
+  & Lokalny dysk EC2 jest ulotny --- zatrzymanie instancji grozi utratą danych. S3 zapewnia trwałość modeli i logów niezależnie od cyklu stop/start. \\
 \addlinespace
 System operacyjny EC2
   & Amazon Linux 2023
-  & OpenSSL~3.0 kompatybilny z urllib3~v2.0 (AL2 wymagał przypinania); wsparcie do 2028; natywny \texttt{dnf} \\
+  & OpenSSL~3.0 jest natywnie kompatybilny z urllib3~v2.0, w odróżnieniu od AL2, który wymagał przypinania wersji. Wsparcie sięga 2028 roku, a natywnym menedżerem pakietów jest \texttt{dnf}. \\
 \end{longtable}

@@ -16,7 +16,7 @@ Ciągłe Dostarczanie (ang. \textit{Continuous Delivery}) rozszerza CI o automat
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=0.55\linewidth]{img/02_wprowadzenie_teoretyczne/CI-CD.jpg}
+  \includegraphics[width=0.65\linewidth]{img/02_wprowadzenie_teoretyczne/CI-CD.jpg}
   \caption{Przykład flow CI/CD \cite{geeksforgeeks_cicd}}
 \end{figure}
 
@@ -43,10 +43,10 @@ MLOps (ang. \textit{Machine Learning Operations}) to dyscyplina stosująca zasad
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/02_wprowadzenie_teoretyczne/mlops_flow.png}
-  \caption{Przykład flow CI/CD \cite{mlops_flow}}
+  \caption{Przykład flow MLOps \cite{mlops_flow}}
 \end{figure}
 
-MLflow spina cały cykl życia modelu ML — od rejestrowania eksperymentów, parametrów i metryk podczas treningu, przez wersjonowanie oraz rejestrację modeli w Model Registry, aż po zarządzanie wdrożeniem i monitorowanie kolejnych wersji w środowisku produkcyjnym.
+MLflow spina cykl życia modelu ML od rejestrowania eksperymentów, parametrów i metryk podczas treningu, przez wersjonowanie modeli i zarządzanie etapami cyklu życia w Model Registry. Monitoring działającej aplikacji produkcyjnej realizują dedykowane narzędzia --- w niniejszym projekcie Prometheus i Grafana (opisane w dalszej części rozdziału).
 \subsection{Kontrola wersji --- Git i GitHub}
 
 Git to rozproszony system kontroli wersji, będący de facto standardem w nowoczesnym tworzeniu oprogramowania \cite{chacon2014pro_git}. Przechowuje pełną historię zmian w postaci grafu migawek (ang. \textit{snapshots}), umożliwiając równoległą pracę na gałęziach (ang. \textit{branches}), scalanie zmian oraz cofanie się do dowolnego punktu w historii projektu.
@@ -67,11 +67,12 @@ GitHub Actions to platforma automatyzacji wbudowana w GitHub, pozwalająca defin
 
 Podstawowe pojęcia:
 \begin{itemize}
-  \item \textbf{Workflow} --- zestaw automatycznych zadań zdefiniowany w pliku \path{.github/workflows/*.yaml},
+  \item \textbf{Workflow} --- zestaw automatycznych zadań uruchamianych w ramach GitHub Actions, zdefiniowany w pliku \path{.github/workflows/*.yaml}, opisujący m.in. kiedy proces ma się uruchomić (triggery), jakie środowisko wykorzystać oraz jakie kroki wykonać.
   \item \textbf{Job} --- jednostka wykonania złożona z kroków (steps); domyślnie uruchamiana równolegle z innymi jobami,
   \item \textbf{Step} --- pojedyncza operacja w ramach joba: wywołanie skryptu lub gotowej akcji,
-  \item \textbf{Runner} --- maszyna wykonująca joba; może być zarządzana przez GitHub (hosted) lub przez użytkownika (self-hosted),
-  \item \textbf{Artefakt} --- plik lub katalog przekazywany między jobami albo pobierany po zakończeniu workflow.
+  \item \textbf{Runner} --- maszyna wykonująca joba: może być zarządzana przez GitHub (hosted) lub przez użytkownika (self-hosted),
+  \item \textbf{Artefakt} --- plik lub katalog przekazywany między jobami albo pobierany po zakończeniu workflow,
+  \item \textbf{Secrets} --- zaszyfrowane zmienne środowiskowe przechowywane na poziomie repozytorium; umożliwiają bezpieczne wstrzykiwanie poświadczeń i kluczy API do workflow bez umieszczania ich w kodzie źródłowym.
 \end{itemize}
 
 Kluczową cechą GitHub Actions jest możliwość użycia \textbf{self-hosted runners}. Maszyny zarządzane przez użytkownika, co w niniejszym projekcie pozwala uruchamiać trening bezpośrednio na instancji EC2 wyposażonej w odpowiedni sprzęt obliczeniowy, bez potrzeby przekazywania danych treningowych przez sieć do zewnętrznego runnera.
@@ -83,7 +84,7 @@ Docker to platforma do tworzenia, dystrybucji i uruchamiania aplikacji w kontene
 Kluczowe pojęcia:
 \begin{itemize}
   \item \textbf{Obraz (image)} --- niezmienny szablon środowiska definiowany plikiem \texttt{Dockerfile},
-  \item \textbf{Kontener} --- działająca instancja obrazu; izolowana od systemu hosta i innych kontenerów,
+  \item \textbf{Kontener} --- działająca instancja obrazu: uruchomiona w kontenerze, izolowana od systemu hosta i innych kontenerów
   \item \textbf{Rejestr (registry)} --- repozytorium obrazów (np. Docker Hub, Amazon ECR).
 \end{itemize}
 
@@ -99,7 +100,7 @@ k3s to uproszczona dystrybucja Kubernetes stworzona przez Rancher Labs. Zmniejsz
 
 \textbf{Infrastruktura jako kod} (ang. \textit{Infrastructure as Code}, IaC) to praktyka definiowania i zarządzania zasobami infrastrukturalnymi za pomocą plików konfiguracyjnych przechowywanych w systemie kontroli wersji, zamiast ręcznego konfigurowania przez interfejs graficzny lub CLI \cite{hashicorp_terraform}. Dzięki temu środowisko jest powtarzalne, audytowalne i odtwarzalne dowolnym momencie.
 
-\textbf{Terraform} to narzędzie IaC firmy HashiCorp umożliwiające tworzenie, modyfikowanie i niszczenie zasobów chmurowych w deklaratywnym języku HCL (ang. \textit{HashiCorp Configuration Language}). Terraform utrzymuje plik stanu (\texttt{terraform.tfstate}) opisujący aktualną konfigurację infrastruktury, co pozwala wykrywać i stosować wyłącznie te zmiany, które są niezbędne. W projekcie Terraform zarządza zasobami AWS: siecią VPC, instancją EC2, zasobnikami S3 i rejestrem ECR.
+\textbf{Terraform} to narzędzie IaC umożliwiające tworzenie, modyfikowanie i niszczenie zasobów chmurowych w deklaratywnym języku HCL (ang. \textit{HashiCorp Configuration Language}). Terraform utrzymuje plik stanu (\texttt{terraform.tfstate}) opisujący aktualną konfigurację infrastruktury, co pozwala wykrywać i stosować wyłącznie te zmiany, które są niezbędne. W projekcie Terraform zarządza zasobami AWS: siecią VPC, instancją EC2, zasobnikami S3 i rejestrem ECR.
 
 \textbf{Helm} to menedżer pakietów dla Kubernetes, analogiczny do apt czy pip w świecie aplikacji \cite{helm_docs}. Pakiet Helm (ang. \textit{chart}) zawiera szablony zasobów Kubernetes parametryzowane wartościami z pliku \texttt{values.yaml}. Umożliwia to instalację, aktualizację i usuwanie złożonych aplikacji wieloskładnikowych jednym poleceniem, z pełną historią wdrożeń i możliwością cofnięcia (rollback). W projekcie Helm zarządza wdrożeniem API modelu oraz stosu monitorującego na klastrze k3s.
 
