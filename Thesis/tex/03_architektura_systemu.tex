@@ -125,14 +125,22 @@ Na klastrze k3s \cite{k3s_docs} uruchomionym na instancji EC2 działają cztery 
 
 Tabela~\ref{tab:decisions} zestawia najważniejsze decyzje projektowe podjęte podczas budowy systemu, wraz z uzasadnieniem wyboru i odrzuconą alternatywą. Każda z nich wynika z jednego lub więcej celów wymienionych w sekcji~\ref{sec:Architektura_systemu}.
 
-\begin{table}[H]
-\centering
-\caption{Kluczowe decyzje architektoniczne}
-\label{tab:decisions}
-\begin{tabularx}{\linewidth}{p{3.5cm}p{3.2cm}X}
+\begin{longtable}{p{3.5cm}p{3.2cm}p{8.5cm}}
+\caption{Kluczowe decyzje architektoniczne}\label{tab:decisions} \\
 \toprule
 \textbf{Decyzja} & \textbf{Wybór} & \textbf{Uzasadnienie} \\
 \midrule
+\endfirsthead
+\multicolumn{3}{r}{\footnotesize\textit{(kontynuacja tabeli~\ref{tab:decisions})}} \\[2pt]
+\toprule
+\textbf{Decyzja} & \textbf{Wybór} & \textbf{Uzasadnienie} \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\footnotesize\textit{(ciąg dalszy na następnej stronie)}} \\
+\endfoot
+\bottomrule
+\endlastfoot
 Orchestracja kontenerów
   & k3s na EC2
   & EKS jest ~15$\times$ droższy; k3s wystarcza dla jednego węzła \\
@@ -145,7 +153,7 @@ Dostęp do API
   & NodePort 30080
   & Load Balancer ~\$18/mies.; publiczny adres IP EC2 z Elastic IP jest wystarczający \\
 \addlinespace
-Tytuł instancji EC2
+Typ instancji EC2
   & t3.large (8~GB RAM)
   & t3.small/medium: crash OOM przy pobieraniu obrazu PyTorch 8,69~GB; t3.large jest minimum \\
 \addlinespace
@@ -168,6 +176,28 @@ Baseline bramki jakości
 IAM dla GitHub Actions
   & Tymczasowe klucze sesji
   & AWS Academy zabrania tworzenia ról IAM; OIDC niedostępne; klucze rotowane ręcznie \\
-\bottomrule
-\end{tabularx}
-\end{table}
+\addlinespace
+Scalanie danych treningowych
+  & GitHub Actions
+  & Eliminuje konieczność lokalnych poświadczeń AWS u każdego dewelopera; hook \texttt{pre-push} tworzy jedynie gałąź danych ($<$10~s) bez dostępu do S3 \\
+\addlinespace
+Framework serwowania API
+  & FastAPI + Uvicorn
+  & Asynchroniczne I/O, automatyczna dokumentacja OpenAPI; Flask synchroniczny; TorchServe nadmiarowy dla jednego modelu \\
+\addlinespace
+Metryki działania API
+  & Prometheus client
+  & Prometheus i Grafana wbudowane w stos k3s; CloudWatch generuje dodatkowe koszty; bezpłatna integracja \\
+\addlinespace
+Obraz bazowy Docker
+  & \texttt{python:3.12-slim}
+  & Mniejszy rozmiar niż \texttt{python:3.12}; zależności systemowe (\texttt{libgl1}, \texttt{libglib2.0}) dodane explicite, co czyni je widocznymi i reprodukowalnymi \\
+\addlinespace
+Artefakty MLflow
+  & Amazon S3
+  & Lokalny dysk EC2 jest ulotny po zatrzymaniu instancji; S3 zapewnia trwałość modeli i logów niezależnie od cyklu stop/start \\
+\addlinespace
+System operacyjny EC2
+  & Amazon Linux 2023
+  & OpenSSL~3.0 kompatybilny z urllib3~v2.0 (AL2 wymagał przypinania); wsparcie do 2028; natywny \texttt{dnf} \\
+\end{longtable}
