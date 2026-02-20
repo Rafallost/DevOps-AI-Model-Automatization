@@ -76,6 +76,8 @@ v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
 \end{tabular}
 \end{table}
 
+Rysunek~\ref{fig:mlflow-metrics-all} wizualizuje te same wartości w interfejsie MLflow, potwierdzając ich poprawne zarejestrowanie po każdym przebiegu treningowym.
+
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/mlfow_models_metrics_all.png}
@@ -83,11 +85,12 @@ v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
  \label{fig:mlflow-metrics-all}
 \end{figure}
 
+Spośród wszystkich wersji jedynie te spełniające jednocześnie oba kryteria bramki jakości --- wyższy Dice i IoU od aktualnego modelu Production --- zostały awansowane do stadium Production. Tabela~\ref{tab:metryki-production} zestawia wyłącznie te wersje.
 
 \begin{table}[H]
 \centering
 \caption{Metryki jakości modelu typu production dla kolejnych wersji}
-\label{tab:metryki}
+\label{tab:metryki-production}
 \begin{tabular}{|l|c|c|l|}
 \hline
 \textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Hausdorff} \\
@@ -104,6 +107,8 @@ v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
 \end{tabular}
 \end{table}
 
+Rysunek~\ref{fig:mlflow-metrics-production} przedstawia widok rejestru MLflow z wyłącznie tymi wersjami, skąd API pobierało model przy każdym starcie kontenera.
+
 \begin{figure}[H]
  \centering
  \includegraphics[width=0.9\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/mlflow_models_metrics_production.png}
@@ -117,12 +122,16 @@ Warto zauważyć, że wczesne wersje modelu (v1, v3) uzyskały wartości Dice i 
 
 Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowania i kontroli jakości. Wszystkie wersje modelu były rejestrowane w MLflow niezależnie od wyniku, co umożliwia pełną historię eksperymentów. Do etapu \textit{Production} awansowały wyłącznie wersje spełniające wymagania bramki jakości, a tylko te wersje były następnie pobierane przez serwis inferencyjny i udostępniane użytkownikom. Pozostałe wersje zachowały stage \textit{None} i nie uczestniczyły w deploymencie.
 
+Rysunki~\ref{fig:mlflow-accuracy}--\ref{fig:mlflow-loss} ilustrują przebieg treningu najlepszego modelu (v20): krzywe Accuracy, Dice, IoU oraz funkcji straty rejestrowane w MLflow co pięć epok. Zbieżność krzywych treningowej i walidacyjnej we wszystkich czterech przypadkach wskazuje na brak przeuczenia modelu w toku całego procesu uczenia.
+
 \begin{figure}[H]
  \centering
  \includegraphics[width=0.8\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_accuracy.png}
  \caption{Wykres metryki Accuracy dla najlepszej wersji modelu (v20) w interfejsie MLflow}
  \label{fig:mlflow-accuracy}
 \end{figure}
+
+Metryka Accuracy jest miarą ogólną i osiąga wyższe wartości niż Dice, ponieważ uwzględnia piksele tła jako poprawne predykcje. Krzywa Dice (rysunek~\ref{fig:mlflow-dice}) bezpośrednio mierzy nakładanie się predykowanej maski z referencyjną i stanowi podstawową metrykę oceny segmentacji --- jej wartość końcowa wyniosła 0,8134.
 
 \begin{figure}[H]
  \centering
@@ -131,6 +140,8 @@ Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowan
  \label{fig:mlflow-dice}
 \end{figure}
 
+Metryka IoU (rysunek~\ref{fig:mlflow-iou}), znana również jako Jaccard Index, jest ściśle powiązana z Dice i mierzy stosunek przekroju do sumy predykowanego i referencyjnego obszaru. Dla modelu v20 osiągnęła wartość końcową 0,7409, co oznacza, że ponad 74\% predykowanego obszaru pokrywa się z maską referencyjną.
+
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_iou.png}
@@ -138,12 +149,16 @@ Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowan
  \label{fig:mlflow-iou}
 \end{figure}
 
+Przebieg funkcji straty (rysunek~\ref{fig:mlflow-loss}) potwierdza stabilną zbieżność: wartość \textit{validation loss} systematycznie malała przez cały czas treningu bez wyraźnych oznak rozbieżności między zbiorem treningowym a walidacyjnym.
+
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_loss.png}
  \caption{Wykres funkcji straty dla najlepszej wersji modelu (v20) w interfejsie MLflow}
  \label{fig:mlflow-loss}
 \end{figure}
+
+Jakościową ocenę predykcji ilustruje rysunek~\ref{fig:mlflow-pred-2}, który zestawia obraz wejściowy, maskę referencyjną (ground truth) i maskę wygenerowaną przez model v20. Kształt i lokalizacja predykowanego obszaru wodomierza są zbliżone do maski referencyjnej, co koresponduje z uzyskanymi wartościami metryk ilościowych.
 
 \begin{figure}[H]
  \centering
@@ -153,6 +168,8 @@ Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowan
 \end{figure}
 
 \subsection{Koszty infrastruktury AWS}
+
+Tabela~\ref{tab:koszty} zestawia szacowane koszty poszczególnych zasobów AWS poniesionych w toku realizacji projektu. Dominującą pozycją jest instancja EC2 uruchamiana na czas treningu; pozostałe zasoby (S3, ECR) generują koszty rzędu centów miesięcznie.
 
 \begin{table}[H]
 \centering
