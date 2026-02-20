@@ -48,7 +48,9 @@ permissions:
 \end{verbatim}
 
 \paragraph{Runnery}\mbox{}\\
+\begin{sloppypar}
 Większość jobów uruchamia się na środowisku zarządzanym przez GitHub (\texttt{runs-on: ubuntu-latest}), co nie wymaga utrzymania własnej infrastruktury i nie generuje kosztów podczas oczekiwania. Wyjątkiem są joba \texttt{train} i \texttt{deploy} --- wykonują się na \texttt{runs-on: self-hosted}, czyli bezpośrednio na instancji EC2. Taki podział eliminuje transfer danych treningowych przez sieć publiczną: dane pozostają na EC2 przez cały czas treningu.
+\end{sloppypar}
 
 \paragraph{Komunikacja między jobami}\mbox{}\\
 GitHub Actions umożliwia przekazywanie wartości między jobami przez mechanizm \textit{outputs}. Job \texttt{merge-and-validate} eksponuje wyniki walidacji (\texttt{validation\_passed}, liczba obrazów), a job \texttt{train} eksponuje flagę \texttt{improved}, na podstawie której warunkowane są dalsze joby. Artefakty GitHub Actions służą natomiast do przekazywania samych plików danych (scalony zbiór) między jobem \texttt{merge-and-validate} a jobem \texttt{train}, który wykonuje się na innym runnerze.
