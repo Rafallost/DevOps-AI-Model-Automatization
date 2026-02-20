@@ -15,7 +15,7 @@ Projektując system, kierowano się pięcioma celami:
   \item \textbf{Porównywalność} --- system musi być zbudowany w sposób umożliwiający zebranie wymieranych danych w celu porównania z podejściem manualnym.
 \end{enumerate}
 
-Ograniczenia budżetowe wykluczyły usługi o wysokim koszcie stałym: EKS (~\$150/mies.), RDS (~\$30/mies.), NAT Gateway (~\$32/mies.) i ALB (~\$18/mies.) --- zastąpione przez k3s na EC2, SQLite i NodePort.
+Ograniczenia budżetowe wykluczyły usługi o wysokim koszcie stałym: EKS (~\$150/mies.), RDS (~\$30/mies.), NAT Gateway (~\$32/mies.) i ALB (~\$18/mies.) \cite{aws_pricing} --- zastąpione przez k3s na EC2, SQLite i NodePort.
 
 Dodatkowym ograniczeniem środowiska AWS Academy jest brak możliwości konfiguracji federacji tożsamości OIDC --- mechanizmu, który w standardowych środowiskach produkcyjnych pozwala GitHub Actions uwierzytelniać się w AWS bez przechowywania długoterminowych kluczy (role IAM przypisane do instancji EC2 są dozwolone, natomiast OIDC dla zewnętrznych systemów CI/CD jest niedostępne). W konsekwencji tymczasowe klucze sesji (generowane przy każdym uruchomieniu laboratorium) przechowywane są jako zaszyfrowane sekrety repozytorium GitHub i wstrzykiwane do zmiennych środowiskowych workflow podczas każdego uruchomienia \cite{github_actions_docs}. Sekrety są rotowane ręcznie przy każdym odnowieniu sesji, co stanowi kompromis akceptowalny w kontekście projektu badawczego (rysunek~\ref{fig:github-secrets}).
 
