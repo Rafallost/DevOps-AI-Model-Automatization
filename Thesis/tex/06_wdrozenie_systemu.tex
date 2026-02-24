@@ -5,44 +5,51 @@ Rozdział opisuje infrastrukturę, na której działa system, sposób jej konfig
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/C4Deployment.png}
-  \caption{Diagram wdrożenia systemu --- konkretne zasoby AWS, adresy i porty}
+  \includegraphics[width=0.75\linewidth]{img/06_wdrozenie_systemu/C4Deployment.png}
+  \caption{Diagram wdrożenia systemu. Szczegółowe zasoby AWS, adresy i porty}
   \label{fig:deployment-diagram}
 \end{figure}
 
+\begin{sloppypar}
+Diagram przedstawia topologię wdrożeniową systemu z podziałem na trzy granice: platformę GitHub, usługi AWS oraz środowisko wykonawcze na instancji EC2. Na tej samej maszynie współdziałają dwa procesy systemd (runner GitHub Actions i serwer MLflow) oraz klaster k3s, w którym uruchomiony jest pod API modelu i stos monitoringu. Konfiguracja \texttt{hostNetwork:~true} pozwala podowi na dostęp do serwera MLflow przez \texttt{localhost:5000}, eliminując potrzebę wystawiania usługi poza klaster.
+\end{sloppypar}
+
 \subsection{Infrastruktura Terraform}
 
-Infrastruktura AWS jest zdefiniowana jako kod przy użyciu Terraform \cite{hashicorp_terraform}. Definicje znajdują się w katalogu \texttt{devops/terraform/} i obejmują wszystkie zasoby potrzebne do działania projektu. Zastosowane podejście IaC (Infrastructure as Code) pozwala odtworzyć całe środowisko jedną komendą \texttt{terraform apply}, bez ręcznego klikania w konsoli AWS.
-
-Pliki konfiguracyjne są podzielone według odpowiedzialności:
-\begin{itemize}
-  \item \texttt{main.tf} --- zasoby EC2, VPC, sieci,
-  \item \texttt{s3.tf} --- zasobniki S3 i uprawnienia,
-  \item \texttt{ecr.tf} --- rejestr obrazów Docker,
-  \item \texttt{iam.tf} --- role i polityki IAM,
-  \item \texttt{variables.tf} --- deklaracje zmiennych z wartościami domyślnymi,
-  \item \texttt{terraform.tfvars} --- konkretne wartości zmiennych (region, typ instancji, IP operatora).
-\end{itemize}
+Infrastruktura AWS jest zdefiniowana jako kod przy użyciu Terraform \cite{hashicorp_terraform}. Definicje znajdują się w katalogu \texttt{devops/terraform/}. Zastosowana architektura minimalizuje koszty. Używa wyłącznie zasobów niezbędnych do działania projektu i unika kosztownych komponentów zarządzanych przez AWS (EKS, RDS, NAT Gateway, Load Balancer).
 
 Tworzone zasoby:
 \begin{itemize}
-  \item \textbf{VPC i podsieć publiczna} --- prosta sieć z bezpośrednim dostępem do internetu przez Internet Gateway; eliminuje potrzebę NAT Gateway (oszczędność \textasciitilde\$32/miesiąc),
-  \item \textbf{Security Group} --- reguły ruchu przychodzącego i wychodzącego opisane w sekcji~\ref{subsec:porty},
-  \item \textbf{Instancja EC2} --- typ \texttt{t3.large} (8~GB RAM, 2~vCPU); konfigurowalny przez zmienną \texttt{instance\_type} w \texttt{terraform.tfvars},
-  \item \textbf{Amazon S3} --- dwa zasobniki: \texttt{wms-dvc-data-*} dla danych treningowych DVC i \\\texttt{wms-mlflow-artifacts-*} dla artefaktów MLflow,
+  \item \textbf{VPC i podsieć publiczna} --- prosta sieć z bezpośrednim dostępem do internetu przez Internet Gateway; eliminuje potrzebę NAT Gateway,
+  \item \textbf{Security Group} --- otwiera porty SSH (22), HTTP (80), NodePort Kubernetes (30000--32767) i port MLflow (5000) dla dozwolonych adresów IP,
+  \item \textbf{Instancja EC2} --- uruchamiana na żądanie przez workflow \cite{github_actions_docs}; typ instancji konfigurowalny przez zmienną (\texttt{t3.large} dla produkcji ML),
+  \item \textbf{Amazon S3} --- dwa zasobniki: jeden dla artefaktów MLflow, drugi opcjonalnie dla danych treningowych DVC,
   \item \textbf{Amazon ECR} --- rejestr obrazów Docker dla API modelu,
-  \item \textbf{IAM Role} --- rola instancji EC2 z uprawnieniami do odczytu i zapisu S3 oraz ECR; rola jest przypisywana do instancji, co eliminuje potrzebę przechowywania kluczy AWS na maszynie.
+  \item \textbf{IAM Role} --- rola instancji EC2 z uprawnieniami do odczytu i zapisu S3 oraz ECR.
 \end{itemize}
 
-Infrastruktura uruchamiana jest jednorazowo poleceniem \texttt{terraform apply} (rys.~\ref{fig:terraform-apply}), nie tworzona od nowa przy każdym treningu. Zasoby statyczne (VPC, S3, ECR, IAM) istnieją przez cały czas życia projektu. Instancja EC2 jest natomiast zatrzymywana po każdym uruchomieniu pipeline'u i wznawiana tylko na czas treningu lub wdrożenia, co istotnie obniża koszty eksploatacji.
+Infrastruktura uruchamiana jest jednorazowo poleceniem \texttt{terraform apply} (rys.~\ref{fig:terraform-apply}). Instancja EC2 jest następnie zatrzymywana i uruchamiana automatycznie przez workflow tylko na czas treningu i wdrożenia, co istotnie obniża koszty eksploatacji.
+
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/terraform_apply.png}
+  \includegraphics[width=0.75\linewidth]{img/06_wdrozenie_systemu/terraform_apply.png}
   \caption{Wynik polecenia \texttt{terraform apply} --- lista 12 utworzonych zasobów AWS}
   \label{fig:terraform-apply}
 \end{figure}
 
-Rysunki~\ref{fig:aws-ec2} i~\ref{fig:aws-s3} przedstawiają odpowiednio instancję EC2 i zasobniki S3 w konsoli AWS.
+Kod Terraform zorganizowany jest w moduły wywoływane z \texttt{main.tf}:
+\begin{itemize}
+\item \texttt{modules/vpc/} --- sieć VPC, podsieć publiczna, Internet Gateway,
+\item \texttt{modules/s3-mlops/} --- zasobniki S3 i uprawnienia,
+\item \texttt{modules/ecr/} --- rejestr obrazów Docker,
+\item \texttt{modules/ec2-k3s/} --- instancja EC2, Elastic IP, skrypt \texttt{user-data},
+\item \texttt{variables.tf} --- deklaracje zmiennych z wartościami domyślnymi,
+\item \texttt{terraform.tfvars} --- konkretne wartości zmiennych (np. nazwy zasobników S3).
+\end{itemize}
+
+\mbox{}\\\\\\
+
+\textbf{Rysunki~\ref{fig:aws-ec2} i~\ref{fig:aws-s3} przedstawiają odpowiednio instancję EC2 i zasobniki S3 w AWS.}
 
 \begin{figure}[H]
   \centering
@@ -50,14 +57,13 @@ Rysunki~\ref{fig:aws-ec2} i~\ref{fig:aws-s3} przedstawiają odpowiednio instancj
   \caption{Instancja EC2 \texttt{wms-k3s} w konsoli AWS}
   \label{fig:aws-ec2}
 \end{figure}
-\vspace{-30pt}
+\vspace{-40pt}
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/aws_s3_buckets.png}
   \caption{Zasobniki S3: \texttt{wms-dvc-data-*} dla danych treningowych i \texttt{wms-mlflow-artifacts-*} dla artefaktów}
   \label{fig:aws-s3}
 \end{figure}
-\vspace{5pt}
 
 \subsection{Konfiguracja EC2 i k3s}
 
@@ -69,24 +75,27 @@ Kroki wykonywane przez \texttt{user-data}:
   \item Instalacja k3s --- uproszczonego Kubernetes \cite{k3s_docs}.
   \item Instalacja MLflow i boto3: \texttt{pip3 install --ignore-installed mlflow boto3}.
   \item Konfiguracja MLflow jako usługi systemd:
-\begin{verbatim}
+\begin{lstlisting}[language=bash]
 [Service]
 ExecStart=mlflow server \
-  --host 0.0.0.0 --port 5000 \
-  --default-artifact-root s3://${mlflow_bucket}/
-\end{verbatim}
+  --backend-store-uri sqlite:////opt/mlflow/mlflow.db \
+  --default-artifact-root s3://${mlflow_bucket}/ \
+  --host 0.0.0.0
+\end{lstlisting}
   \item Instalacja GitHub Actions runnera jako usługi systemd.
 \end{enumerate}
 
 Instancja korzysta z Amazon Linux 2023, który oferuje nowszy OpenSSL 3.0 i wsparcie producenta do 2028 roku. Po zakończeniu \texttt{user-data} instancja jest gotowa do przyjęcia zadań z GitHub Actions bez dalszej konfiguracji ręcznej.
 
-\textbf{Architektura k3s.} K3s to uproszczona dystrybucja Kubernetes zawarta w pojedynczym pliku binarnym. W porównaniu do pełnego Kubernetes zastępuje etcd bazą SQLite, usuwa przestarzałe sterowniki i wbudowuje podstawowe komponenty sieciowe. Dzięki temu działa na instancji \texttt{t3.large} (8~GB RAM) ze znaczącym zapasem zasobów dla poda z modelem; pełne Kubernetes samo w sobie wymagałoby podobnej ilości RAM.
+\textbf{Architektura k3s.} K3s (opisany w podrozdziale~\ref{subsec:k3s}) działa na instancji \texttt{t3.large} (8~GB RAM) ze znaczącym zapasem zasobów dla poda z modelem; pełne Kubernetes samo w sobie wymagałoby podobnej ilości RAM.
 
 W projekcie użyty jest klaster jednorazłowy (single-node): jeden węzeł pełni jednocześnie rolę control plane i workera. Taka architektura jest wystarczająca dla jednej działającej aplikacji i eliminuje koszty dodatkowych instancji EC2. Wysoka dostępność (HA) nie była wymaganiem. System jest przeznaczony do demonstracji i testowania, nie do środowiska produkcyjnego.
 
 \textbf{Strategia aktualizacji.} Dla Deploymentu zastosowano domyślną strategię \texttt{RollingUpdate}: k3s najpierw uruchamia nowy pod, a dopiero po jego gotowości usuwa stary. Oznacza to zerowy przestój (zero-downtime deployment) przy aktualizacji modelu. Działa to jednak tylko wtedy, gdy instancja EC2 jest uruchomiona. W przeciwnym wypadku klaster jest niedostępny.
 
-\textbf{Rollbacki i wersjonowanie.} Rollbacki na poziomie Kubernetes nie są rozbudowane celowo. Mechanizmem wersjonowania modeli jest MLflow, gdzie każda wersja modelu jest zarejestrowana w rejestrze MLflow ze swoimi metrykami. Rollback polega na przestawieniu stadium modelu w MLflow z \texttt{Production} na poprzednią wersję i ponownym uruchomieniu \texttt{deploy-model.yaml}. Helm zachowuje historię ostatnich wdrożeń (\texttt{helm history wms-api}), co umożliwia też cofnięcie konfiguracji Kubernetes bez ponownego treningu.
+\begin{sloppypar}
+\textbf{Rollbacki i wersjonowanie.} Rollbacki na poziomie Kubernetes nie są rozbudowane celowo. Mechanizmem wersjonowania modeli jest MLflow, gdzie każda wersja modelu jest zarejestrowana w rejestrze MLflow ze swoimi metrykami. Rollback polega na przestawieniu stadium modelu w MLflow z \texttt{Production} na poprzednią wersję i ponownym uruchomieniu \texttt{deploy-model.yaml}. Helm zachowuje historię ostatnich wdrożeń (\texttt{helm history wms-model}), co umożliwia też cofnięcie konfiguracji Kubernetes bez ponownego treningu.
+\end{sloppypar}
 
 Rysunek~\ref{fig:systemctl-status} potwierdza poprawne działanie usług systemd, a rysunek~\ref{fig:kubectl-pods} przedstawia aktualny stan podów klastra k3s.
 
@@ -139,6 +148,8 @@ Security Group Terraform otwiera wyłącznie porty niezbędne do działania syst
 \end{tabular}
 \end{table}
 
+\noindent\mbox{}
+
 Ruch przychodzący na porty 5000, 30080, 30300 i 30900 jest dozwolony z dowolnego adresu IP (\texttt{0.0.0.0/0}), ponieważ EC2 nie jest wyposażone w Load Balancer z certyfikatem TLS, a połączenia odbywają się po HTTP. Port SSH (22) jest ograniczony do konkretnego adresu IP operatora skonfigurowanego w \texttt{terraform.tfvars}. Konfigurację Security Group przedstawia rysunek~\ref{fig:security-group}.
 
 \begin{figure}[H]
@@ -154,17 +165,18 @@ W projekcie Helm \cite{helm_docs} wykorzystywany jest dwojako: do wdrożenia wł
 
 \textbf{Chart API modelu.} Katalog \texttt{devops/helm/ml-model/} zawiera własny chart Kubernetes dla serwera API. Zamiast zarządzać oddzielnymi plikami manifestów, całą aplikację opisuje jeden zestaw szablonów YAML sparametryzowanych zmiennymi. Bez Helm każda aktualizacja wymagałaby ręcznej edycji kilku plików i kolejnych wywołań \texttt{kubectl apply}. Helm sprowadza to do jednej komendy:
 
-\begin{verbatim}
+\begin{lstlisting}[language=bash]
 helm upgrade --install wms-model devops/helm/ml-model/ \
   -f infrastructure/helm-values.yaml \
   --namespace default --create-namespace
-\end{verbatim}
+\end{lstlisting}
 
-Komenda ta działa zarówno przy pierwszym wdrożeniu (\textit{install}) jak i przy aktualizacji (\textit{upgrade}); Helm sam sprawdza czy release już istnieje. Helm zachowuje historię wdrożeń (\texttt{helm history wms-model}), co umożliwia szybki rollback do poprzedniej wersji.
+\begin{sloppypar}
+Komenda ta działa zarówno przy pierwszym wdrożeniu (\textit{install}) jak i przy aktualizacji (\textit{upgrade}). Helm sam sprawdza czy release już istnieje. Helm zachowuje historię wdrożeń (\texttt{helm history wms-model}), co umożliwia szybki rollback do poprzedniej wersji.
+\end{sloppypar}
 
 Struktura charta:
-
-\begin{verbatim}
+\begin{lstlisting}
 devops/helm/ml-model/
 +-- Chart.yaml              <- metadane (nazwa, wersja charta)
 +-- values.yaml             <- wartosci domyslne (NodePort 30080, limity RAM/CPU)
@@ -173,11 +185,14 @@ devops/helm/ml-model/
     +-- deployment.yaml     <- zasob Deployment
     +-- service.yaml        <- zasob Service (NodePort 30080)
     \-- servicemonitor.yaml <- ServiceMonitor dla Prometheus
-\end{verbatim}
+\end{lstlisting}
 
-Szablony korzystają ze składni Go Templates i odwołują się do wartości przez \texttt{.Values.*}. Plik \texttt{infrastructure/helm-values.yaml} nadpisuje wartości domyślne charta dla konkretnego wdrożenia. Najważniejsze fragmenty:
+Szablony korzystają ze składni Go Templates i odwołują się do wartości przez \texttt{.Values.*}. Plik \texttt{infrastructure/helm-values.yaml} nadpisuje wartości domyślne charta dla konkretnego wdrożenia. 
 
-\begin{verbatim}
+\mbox{}\\
+
+Najważniejsze fragmenty:
+\begin{lstlisting}[language=yaml]
 image:
   repository: "055677744286.dkr.ecr.us-east-1.amazonaws.com/wms-model"
   pullPolicy: Always
@@ -199,14 +214,16 @@ resources:
   requests:
     memory: "512Mi"
     cpu: "100m"
-\end{verbatim}
+\end{lstlisting}
 
+\begin{sloppypar}
 Warto zwrócić uwagę na \texttt{MLFLOW\_TRACKING\_URI: localhost:5000}; kontener korzysta z \texttt{hostNetwork: true}, co pozwala mu odwoływać się do MLflow działającego bezpośrednio na maszynie EC2, bez konieczności dodatkowej usługi Kubernetes. Przy każdym wdrożeniu GitHub Actions podaje aktualny hash commita jako \texttt{--set image.tag=\$\{COMMIT\_SHA\}}, co zapewnia jednoznaczną identyfikację wersji obrazu.
+\end{sloppypar}
 
 Postęp wdrożenia API można śledzić w czasie rzeczywistym poleceniem:
-\begin{verbatim}
+\begin{lstlisting}[language=bash]
 kubectl rollout status deployment/wms-model-ml-model --watch
-\end{verbatim}
+\end{lstlisting}
 
 Po wdrożeniu API jest dostępne pod adresem \texttt{http://100.50.251.97:30080}.
 
@@ -262,69 +279,42 @@ Działanie stosu monitorowania ilustruje dashboard Grafana (rys.~\ref{fig:grafan
 
 \begin{figure}[H]
  \centering
- \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/prometheus_targets.png}
- \caption{Strona \textit{Targets} w Prometheus (\texttt{:30900}) --- endpoint \texttt{/metrics} API w stanie \texttt{UP}}
- \label{fig:prometheus-targets}
-\end{figure}
-
-\begin{figure}[H]
- \centering
  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/grafana_dashboard.png}
  \caption{Dashboard Grafana (\texttt{http://100.50.251.97:30300}) --- metryki działającego API modelu}
  \label{fig:grafana-dashboard}
 \end{figure}
 
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=0.9\linewidth]{img/06_wdrozenie_systemu/prometheus_targets.png}
+ \caption{Strona \textit{Targets} w Prometheus (\texttt{:30900}) --- endpoint \texttt{/metrics} API w stanie \texttt{UP}}
+ \label{fig:prometheus-targets}
+\end{figure}
+
 \subsection{Workflow użytkownika}
 
-\subsubsection{Scenariusz 1: Wdrożenie przez automatyczny pipeline}
+\subsubsection{Scenariusz 1: Ręczne wdrożenie i korzystanie z API (zalecany)}
 
-Jak opisano w rozdziale~\ref{sec:Pipeline_CICD}, dostarczenie nowych danych treningowych przez \texttt{git push} wyzwala pełny pipeline. Jeśli wytrenowany model przeszedł bramkę jakości, pipeline automatycznie wdraża go na klaster k3s przez \texttt{deploy-model.yaml}, a następnie zatrzymuje instancję EC2. Po zakończeniu pipeline'u aplikacja jest zainstalowana na klastrze i gotowa do działania. Aby skorzystać z API, wystarczy uruchomić instancję EC2 za pomocą workflow \textit{Manual EC2 Control} (zakładka \textit{Actions} w GitHub, akcja \textit{start}). Po uruchomieniu workflow wyświetla adres IP w podsumowaniu, a endpoint \texttt{/predict} jest natychmiast dostępny.
-
-Należy zaznaczyć, że wdrożenie następuje tylko gdy model poprawił metryki. Jeśli trening nie przeszedł bramki jakości, klaster k3s nadal serwuje poprzednią wersję. Do kontrolowanego wdrożenia niezależnego od treningu służy Scenariusz~2.
-
-\subsubsection{Scenariusz 2: Ręczne wdrożenie i korzystanie z API (zalecany)}
-
-Jest to zalecany sposób korzystania z systemu dla operatora chcącego uruchomić lub zaktualizować działające API. Cały proces odbywa się przez interfejs GitHub Actions i nie wymaga żadnych lokalnych poświadczeń AWS.
+Jest to zalecany sposób korzystania z systemu dla operatora chcącego uruchomić lub zaktualizować działające API pod adresem \texttt{http://100.50.251.97:30080/}. Cały proces odbywa się przez interfejs GitHub Actions i nie wymaga żadnych lokalnych poświadczeń AWS.
 
 \textbf{Krok 1: Wdrożenie modelu.} W zakładce \textit{Actions} należy uruchomić workflow \textit{Release \& Deploy} (\texttt{release-deploy.yaml}) klikając \textit{Run workflow}. Workflow automatycznie uruchamia instancję EC2, buduje obraz Docker, wypycha go do ECR, pobiera najnowszy model ze stadium Production z MLflow, aktualizuje klaster k3s przez Helm, a po weryfikacji zatrzymuje EC2.
 
-\textbf{Krok 2: Uruchomienie instancji do predykcji.} Po wdrożeniu model jest zainstalowany na klastrze, ale EC2 jest zatrzymany w celu oszczędności. Aby wysyłać zapytania do API, należy uruchomić instancję workflow \textit{Manual EC2 Control} z akcją \textit{start}. Workflow wyświetla aktualne IP i URL MLflow w podsumowaniu uruchomienia. API jest dostępne pod adresem \texttt{http://100.50.251.97:30080/}.
+\textbf{Krok 2: Uruchomienie instancji do predykcji.} Po wdrożeniu model jest zainstalowany na klastrze, ale EC2 jest zatrzymany w celu oszczędności. Aby wysyłać zapytania do API, należy uruchomić instancję workflow \textit{Manual EC2 Control} z akcją \textit{start}. Workflow wyświetla aktualne IP i URL MLflow w podsumowaniu uruchomienia.
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth]{img/06_wdrozenie_systemu/deployed_app.png}
-  \caption{Działający interfejs webowy API modelu: segmentacja trzech zdjęć wodomierzy z wygenerowanymi maskami i zmierzoną latencją predykcji}
+  \includegraphics[width=0.7\linewidth]{img/06_wdrozenie_systemu/deployed_app.png}
+  \caption{Działający interfejs webowy API modelu: segmentacja trzech zdjęć wodomierzy z maskami}
   \label{fig:deployed-app}
 \end{figure}
 
 Po zakończeniu pracy należy ponownie uruchomić \textit{Manual EC2 Control} z akcją \textit{stop}, aby nie generować zbędnych kosztów.
 
-\subsubsection{Scenariusz 3: Lokalna predykcja (wyłącznie dla deweloperów)}
+\subsubsection{Scenariusz 2: Wdrożenie przez automatyczny pipeline}
 
-Predykcję można uruchomić lokalnie bez infrastruktury chmurowej. Opcja ta wymaga jednak spełnienia warunków niedostępnych dla typowego użytkownika końcowego.
+Jak opisano w rozdziale~\ref{sec:Pipeline_CICD}, dostarczenie nowych danych treningowych przez \texttt{git push} wyzwala pełny pipeline. Jeśli wytrenowany model przeszedł bramkę jakości, pipeline automatycznie wdraża go na klaster k3s przez \texttt{deploy-model.yaml}, a następnie zatrzymuje instancję EC2. Po zakończeniu pipeline'u aplikacja jest zainstalowana na klastrze i gotowa do działania. Aby skorzystać z API, wystarczy uruchomić instancję EC2 za pomocą workflow \textit{Manual EC2 Control} (zakładka \textit{Actions} w GitHub, akcja \textit{start}). Po uruchomieniu workflow wyświetla adres IP w podsumowaniu, a endpoint \texttt{/predict} jest natychmiast dostępny.
 
-Wymagania wstępne:
-\begin{itemize}
-  \item działająca instancja EC2 z MLflow (model musi być zarejestrowany w stadium Production),
-  \item lokalne poświadczenia AWS skonfigurowane w \texttt{\textasciitilde/.aws/credentials}: \texttt{AWS\_ACCESS\_KEY\_ID}, \texttt{AWS\_SECRET\_ACCESS\_KEY}, \texttt{AWS\_SESSION\_TOKEN},
-  \item Python z zależnościami projektu zainstalowanymi lokalnie.
-\end{itemize}
-
-Przy spełnieniu powyższych warunków predykcja przebiega następująco:
-\begin{enumerate}
-  \item Pobranie modelu Production z MLflow na dysk lokalny:
-        \begin{lstlisting}[numbers=none,frame=none,backgroundcolor=\color{white},basicstyle=\ttfamily\small,xleftmargin=0pt]
-python WMS/scripts/sync_model_aws.py
-\end{lstlisting}
-  \item Umieszczenie obrazów do segmentacji w \texttt{WMS/data/predict/input/}.
-  \item Uruchomienie predykcji: \texttt{python WMS/src/predicts.py}
-  \item Wyniki zapisywane są w \texttt{WMS/data/predict/output/}.
-\end{enumerate}
-
-Poświadczenia AWS w środowisku AWS Academy są tymczasowe (ważność 4~godziny) i wymagają ręcznego odnawiania przy każdej sesji laboratoryjnej. Z tego powodu opcja lokalnej predykcji jest praktycznie dostępna wyłącznie dla operatora posiadającego bezpośredni dostęp do konta AWS, a nie dla użytkownika końcowego.
-
-Opisane scenariusze pokrywają wszystkie typowe przypadki interakcji z systemem.
-
+Należy zaznaczyć, że wdrożenie następuje tylko gdy model poprawił metryki. Jeśli trening nie przeszedł bramki jakości, klaster k3s nadal serwuje poprzednią wersję. Do kontrolowanego wdrożenia niezależnego od treningu służy Scenariusz~1.
 \subsection{Dostępne operacje zarządzania wdrożeniem}
 
 System udostępnia cztery workflow GitHub Actions do zarządzania infrastrukturą i wdrożeniami. Tabela~\ref{tab:workflows} zestawia je wraz z wyzwalaczami i przeznaczeniem.
@@ -337,7 +327,7 @@ System udostępnia cztery workflow GitHub Actions do zarządzania infrastruktur�
 \hline
 \textbf{Workflow} & \textbf{Wyzwalacz} & \textbf{Przeznaczenie} \\
 \hline
-\texttt{training-data-pipeline} & Push do \texttt{data/*}, \texttt{workflow\_dispatch} & Pełny pipeline: pobieranie danych z S3, walidacja, trening, bramka jakości. Jeśli model poprawił metryki: wdrożenie na k3s i scalenie PR. EC2 uruchamiany i zatrzymywany automatycznie. \\
+\texttt{ci} & Push do \texttt{main}/\texttt{develop}, PR do \texttt{main} & Lintowanie kodu (\texttt{flake8}), sprawdzanie formatowania (\texttt{black}) i uruchamianie testów jednostkowych (\texttt{pytest}) z raportem pokrycia kodu. Nie wymaga infrastruktury AWS. \\
 \hline
 \texttt{release-deploy} & Push do \texttt{main} (zmiany kodu/Docker/Helm), \texttt{workflow\_dispatch} & Wdrożenie modelu na klaster k3s bez treningu: build Docker, push do ECR, aktualizacja Helm. Używany przy zmianach kodu serwowania lub jako ręczne ponowne wdrożenie. EC2 uruchamiany i zatrzymywany automatycznie. \\
 \hline

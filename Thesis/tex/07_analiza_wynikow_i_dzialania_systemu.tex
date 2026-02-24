@@ -3,10 +3,10 @@
 
 \subsection{Metodologia porównania}
 
-Niniejszy rozdział odpowiada na drugie pytanie badawcze postawione we wstępu: czy bardziej opłacalne jest oddelegowanie pracownika do ręcznego utrzymywania modelu, czy też lepsza jest automatyzacja procesu z wykorzystaniem narzędzi DevOps. W tym celu przeprowadzono ilościowe i jakościowe porównanie dwóch podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}:
+Ten rozdział odpowiada na pytanie badawcze postawione we wstępu: czy bardziej opłacalne jest oddelegowanie pracownika do ręcznego utrzymywania modelu, czy też lepsza jest automatyzacja procesu z wykorzystaniem narzędzi DevOps. W tym celu przeprowadzono ilościowe i jakościowe porównanie dwóch podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}. Utrzymanie identycznego zestawu narzędzi w obu podejściach jest kluczowe. Pozwala przypisać wszelkie różnice w nakładzie pracy i ryzyku błędu wyłącznie obecności lub brakowi automatyzacji, a nie różnicom w zastosowanych narzędziach:
 
 \begin{enumerate}
-  \item \textbf{Podejście ręczne} --- wszystkie kroki (przygotowanie danych, trening, walidacja, wdrożenie) wykonywane przez człowieka bez automatyzacji. Inżynier ręcznie uruchamia skrypty, ocenia metryki, rejestruje model i aktualizuje wdrożenie, korzystając z tych samych narzędzi (MLflow, EC2, Helm), lecz bez orkiestracji. Utrzymanie identycznego zestawu narzędzi w obu podejściach jest celowe: pozwala przypisać wszelkie różnice w nakładzie pracy i ryzyku błędu wyłącznie obecności lub brakowi automatyzacji, a nie różnicom w zastosowanych narzędziach. Czasy dla tego podejścia mają charakter szacunkowy i zakładają doświadczonego inżyniera ML pracującego w środowisku projektu.
+  \item \textbf{Podejście ręczne} --- wszystkie kroki (przygotowanie danych, trening, walidacja, wdrożenie) wykonywane przez człowieka bez automatyzacji. Inżynier ręcznie uruchamia skrypty, ocenia metryki, rejestruje model i aktualizuje wdrożenie, korzystając z tych samych narzędzi (MLflow, EC2, Helm), lecz bez orkiestracji. Czasy dla tego podejścia mają charakter szacunkowy i zakładają doświadczonego inżyniera ML pracującego w środowisku projektu.
   \item \textbf{Zautomatyzowane CI/CD (niniejszy projekt)} --- pełna automatyzacja od \texttt{git push} do wdrożenia modelu w oparciu o GitHub Actions, DVC i MLflow. Jedyną czynnością człowieka jest dostarczenie nowych danych treningowych. Czasy zmierzono na podstawie logów GitHub Actions.
 \end{enumerate}
 
@@ -17,6 +17,7 @@ Dokładniejsze wskazanie granicy między podejściami ułatwia zestawienie stoso
   \item \textbf{Narzędzia wyłącznie dla podejścia zautomatyzowanego:} GitHub Actions (orkiestracja całego pipeline'u), DVC (wersjonowanie danych i synchronizacja z S3), hook \texttt{pre-push} Git (automatyczne tworzenie gałęzi danych), Terraform (zarządzanie infrastrukturą jako kod).
 \end{itemize}
 
+\begin{sloppypar}
 Porównanie obejmuje sześć wymiarów, omówionych kolejno w dalszych podsekcjach. Każdy z nich jest mierzony lub oceniany w inny sposób:
 \begin{itemize}
   \item \textbf{Czas nakładu pracy człowieka} (podsekcja~\ref{subsec:czasy}) --- mierzony jako łączna liczba godzin aktywnej pracy inżyniera wymaganych do ukończenia jednego cyklu: od dostarczenia nowych danych do działającego wdrożenia.
@@ -26,6 +27,7 @@ Porównanie obejmuje sześć wymiarów, omówionych kolejno w dalszych podsekcja
   \item \textbf{Skalowalność procesu} (podsekcja~\ref{subsubsec:skalowalnosc}) --- ocena tego, jak zmienia się nakład pracy i czas realizacji przy wzroście rozmiaru zbioru danych lub liczby iteracji.
   \item \textbf{Zużycie zasobów} (podsekcja~\ref{subsec:zasoby}) --- pomiar zużycia pamięci operacyjnej i CPU przez serwis inferencyjny; ocena tego, czy zastosowana infrastruktura jest adekwatna do obciążenia.
 \end{itemize}
+\end{sloppypar}
 
 \subsection{Czasy wykonania scenariuszy}
 \label{subsec:czasy}
@@ -99,7 +101,7 @@ Rysunek~\ref{fig:mlflow-metrics-all} wizualizuje te same wartości w interfejsie
  \label{fig:mlflow-metrics-all}
 \end{figure}
 
-Spośród wszystkich wersji jedynie te spełniające jednocześnie oba kryteria bramki jakości. Wyższy Dice i IoU od aktualnego modelu Production oznacza, że zostały awansowane do stadium Production. Tabela~\ref{tab:metryki-production} zestawia wyłącznie te wersje.
+Spośród wszystkich wersji jedynie te, które jednocześnie spełniły oba kryteria bramki jakości (wyższy Dice i IoU od aktualnego modelu Production), zostały awansowane do stadium Production. Tabela~\ref{tab:metryki-production} zestawia wyłącznie te wersje.
 
 \begin{table}[H]
 \centering
@@ -190,7 +192,7 @@ Tabela~\ref{tab:koszty} zestawia szacowane koszty poszczególnych zasobów AWS p
 \centering
 \caption{Szacowane koszty infrastruktury AWS}
 \label{tab:koszty}
-\begin{tabular}{|l|r|l|}
+\begin{tabular}{|p{5cm}|r|p{7.5cm}|}
 \hline
 \textbf{Zasób} & \textbf{Koszt} & \textbf{Uwagi} \\
 \hline
@@ -226,11 +228,13 @@ Podejście ręczne nie wymaga nakładu konfiguracyjnego, ale generuje cykliczny 
 \label{subsubsec:stabilnosc}
 
 W trakcie testów zaobserwowano następujące zachowania systemu w sytuacjach wyjątkowych, zestawione z odpowiednikiem w podejściu ręcznym:
+\begin{sloppypar}
 \begin{itemize}
   \item \textbf{Niepoprawne dane} --- walidator odrzucał pliki niespełniające wymagań, zwracając komunikat wskazujący konkretne pliki i typy błędów, a dalsze etapy pipeline'u były blokowane. W podejściu ręcznym wykrycie takiego problemu zależy od dyscypliny inżyniera i może nastąpić dopiero po godzinach treningu na wadliwych danych.
   \item \textbf{Model gorszy od baseline} --- bramka jakości automatycznie odrzucała model bez tworzenia PR ani wdrożenia. W podejściu ręcznym decyzja należy do człowieka i może być błędna wskutek przeoczenia, zmęczenia lub presji terminu.
   \item \textbf{Nieoczekiwany błąd pipeline'u} --- job \texttt{stop-infra} uruchamiał się zawsze (\texttt{if: always()}), zatrzymując instancję EC2 nawet przy wyjątku w poprzednim kroku, co eliminuje ryzyko niekontrolowanych kosztów. W podejściu ręcznym pozostawienie uruchomionej instancji po zakończeniu pracy jest częstym źródłem nieplanowanych wydatków.
 \end{itemize}
+\end{sloppypar}
 
 \subsubsection{Skalowalność}
 \label{subsubsec:skalowalnosc}

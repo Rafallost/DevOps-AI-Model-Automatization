@@ -3,9 +3,9 @@
 
 \subsection{Charakterystyka problemu segmentacji semantycznej}
 
-Model sztucznej inteligencji stanowiący podstawę niniejszego projektu został zaprojektowany do rozwiązywania zadania \textbf{segmentacji semantycznej obrazów wodomierzy}. Celem segmentacji jest przypisanie każdemu pikselowi obrazu etykiety określającej jego przynależność do jednej z wyróżnionych klas, w szczególności obszaru licznika, tarczy oraz tła.
+Model sztucznej inteligencji stanowiący podstawę niniejszego projektu został zaprojektowany do rozwiązywania zadania \textbf{segmentacji semantycznej obrazów wodomierzy}. Celem segmentacji jest przypisanie każdemu pikselowi obrazu etykiety określającej jego przynależność do jednej z \textbf{dwóch klas}: obszaru tarczy/licznika (foreground) oraz tła (background), co odpowiada binarnej masce wyjściowej.
 
-Problem ten ma istotne znaczenie praktyczne w kontekście automatyzacji odczytu wskazań wodomierzy, gdzie poprawne wydzielenie obszaru licznika stanowi warunek konieczny dla dalszych etapów przetwarzania obrazu, takich jak rozpoznawanie cyfr lub analiza wskazań mechanicznych. W przeciwieństwie do klasycznej klasyfikacji obrazów, segmentacja semantyczna wymaga zachowania informacji przestrzennej oraz precyzyjnego odwzorowania granic obiektów, co znacząco zwiększa złożoność problemu.
+Problem ten ma istotne znaczenie praktyczne w kontekście automatyzacji odczytu wskazań wodomierzy, gdzie poprawne wydzielenie obszaru tarczy stanowi warunek konieczny dla dalszych etapów przetwarzania obrazu, takich jak rozpoznawanie cyfr lub analiza wskazań mechanicznych. W przeciwieństwie do klasycznej klasyfikacji obrazów, segmentacja semantyczna wymaga zachowania informacji przestrzennej oraz precyzyjnego odwzorowania granic obiektu, co znacząco zwiększa złożoność problemu.
 
 \begin{sloppypar}
 Dodatkowym wyzwaniem są zmienne warunki akwizycji danych, obejmujące różnice w oświetleniu, kącie wykonania zdjęcia, jakości obrazu oraz stopniu zabrudzenia lub zużycia urządzeń pomiarowych. Czynniki te powodują, że klasyczne algorytmy przetwarzania obrazu okazują się niewystarczające, co uzasadnia zastosowanie metod opartych na uczeniu głębokim.
@@ -13,7 +13,7 @@ Dodatkowym wyzwaniem są zmienne warunki akwizycji danych, obejmujące różnice
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth]{img/04_model_sztucznej_inteligencji/Example_Prediction.png}
+  \includegraphics[width=0.95\textwidth]{img/04_model_sztucznej_inteligencji/Example_Prediction.png}
   \caption{Przykład predykcji modelu segmentacji semantycznej}
   \label{fig:example_prediction}
 \end{figure}
@@ -45,9 +45,7 @@ Proces przygotowania danych obejmował normalizację wartości pikseli, standary
 
 Zastosowanie augmentacji pozwala ograniczyć ryzyko przeuczenia modelu oraz poprawić jego zdolność do generalizacji na dane niewidziane w procesie uczenia. Istotnym aspektem projektu jest fakt, że zbiór danych oraz jego kolejne wersje podlegają wersjonowaniu, co umożliwia jednoznaczne powiązanie konkretnej wersji modelu z użytymi danymi treningowymi.
 
-Dodatkowo zadbano o spójność nazewnictwa klas oraz jednolite formaty zapisu plików, co ułatwia późniejszą replikację eksperymentów.
-
-Zbiór danych wykorzystany w projekcie pochodzi z platformy Kaggle \cite{kaggle_water_meters}.
+Dodatkowo zadbano o spójność nazewnictwa klas oraz jednolite formaty zapisu plików, co ułatwia późniejszą replikację eksperymentów. Zbiór danych wykorzystany w projekcie pochodzi z platformy Kaggle \cite{kaggle_water_meters}.
 
 \subsection{Proces uczenia i metryki jakości}
 
@@ -59,9 +57,9 @@ Proces uczenia realizowany jest iteracyjnie, z wykorzystaniem zbioru walidacyjne
 
 \subsection{Model jako artefakt w procesie CI/CD}
 
-W kontekście niniejszej pracy model sztucznej inteligencji traktowany jest jako pełnoprawny artefakt inżynierski, podlegający wersjonowaniu, testowaniu oraz kontrolowanemu wdrażaniu. Każda wersja modelu jest jednoznacznie powiązana z wersją kodu źródłowego, zestawem danych treningowych, konfiguracją hiperparametrów oraz uzyskanymi metrykami jakości.
+W niniejszej pracy model sztucznej inteligencji traktowany jest jako artefakt podlegający wersjonowaniu, walidacji oraz kontrolowanemu wdrażaniu. Każda wytrenowana wersja modelu rejestrowana jest w systemie MLflow wraz z informacjami o użytym kodzie źródłowym, wersji zbioru danych, konfiguracji hiper-parametrów oraz uzyskanych metrykach jakości. Mechanizm ten umożliwia jednoznaczne powiązanie konkretnego modelu z warunkami jego powstania oraz zapewnia transparentność procesu eksperymentalnego.
 
-Takie podejście umożliwia pełną reprodukowalność wyników oraz stanowi podstawę do dalszej analizy porównawczej pomiędzy podejściem manualnym a zautomatyzowanym procesem CI/CD. Szczegółowa analiza wpływu automatyzacji na jakość, stabilność oraz koszty utrzymania modeli sztucznej inteligencji zostanie przedstawiona w kolejnych rozdziałach pracy.
+Takie podejście zapewnia pełną odtwarzalność wyników oraz tworzy podstawę do porównania podejścia manualnego z procesem zautomatyzowanym w ramach CI/CD.
 
 \begin{figure}[H]
   \centering

@@ -64,16 +64,18 @@
 
 % --- Kod źródłowy ---
 \usepackage{listings}
+\lstdefinelanguage{yaml}{
+  keywords={true, false, null},
+  sensitive=false,
+  comment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]"
+}
 \lstset{
   basicstyle=\ttfamily\small,
-  backgroundcolor=\color{gray!10},
-  frame=single,
+  frame=none,
   breaklines=true,
-  numbers=left,
-  numberstyle=\tiny\color{gray},
-  keywordstyle=\color{blue},
-  commentstyle=\color{green!50!black},
-  stringstyle=\color{red!70!black},
+  numbers=none,
   showstringspaces=false,
   literate={ą}{{\k{a}}}1 {ć}{{\'c}}1 {ę}{{\k{e}}}1 {ł}{{\l{}}}1 {ń}{{\'n}}1 {ó}{{\'o}}1 {ś}{{\'s}}1 {ź}{{\'z}}1 {ż}{{\.z}}1
            {Ą}{{\k{A}}}1 {Ć}{{\'C}}1 {Ę}{{\k{E}}}1 {Ł}{{\L{}}}1 {Ń}{{\'N}}1 {Ó}{{\'O}}1 {Ś}{{\'S}}1 {Ź}{{\'Z}}1 {Ż}{{\.Z}}1

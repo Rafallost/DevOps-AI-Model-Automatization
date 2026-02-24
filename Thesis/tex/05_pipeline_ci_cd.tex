@@ -29,14 +29,15 @@ Po zakończeniu działania hooka Git wyświetla komunikat \texttt{error: failed 
 
 Główny plik automatyzacji projektu to \texttt{.github/workflows/training-data-pipeline.yaml} \cite{github_actions_docs}. Definiuje on trigger, konfigurację współbieżności, uprawnienia i osiem jobów składających się na pipeline.
 
-\paragraph{Trigger}\mbox{}\\
-Workflow uruchamia się wyłącznie na push do gałęzi pasujących do wzorca \texttt{data/**}. Oznacza to, że kod przesyłany do \texttt{main} lub innych gałęzi nie inicjuje treningu --- pipeline startuje tylko gdy hook \texttt{pre-push} przekieruje dane na gałąź \texttt{data/TIMESTAMP}:
+\paragraph{Trigger}\mbox{}
+Workflow uruchamia się wyłącznie na push do gałęzi pasujących do wzorca \texttt{data/**}. Oznacza to, że kod przesyłany do \texttt{main} lub innych gałęzi nie inicjuje treningu. Pipeline startuje tylko wtedy, gdy hook \texttt{pre-push} przekieruje dane na gałąź \texttt{data/TIMESTAMP}:
 
-\begin{verbatim}
+\begin{lstlisting}[language=yaml]
 on:
   push:
     branches:
       - 'data/**'
+  workflow_dispatch: {}
 
 concurrency:
   group: training-pipeline
@@ -45,17 +46,26 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-\end{verbatim}
+  
+jobs:
+  merge-and-validate:
+    runs-on: ubuntu-latest
+    outputs:
+      validation_passed: ${{ steps.qa.outputs.validation_passed }}
+      total_images: ${{ steps.merge.outputs.total_images }}
+      new_images: ${{ steps.count_new.outputs.new_images }}
+      existing_images: ${{ steps.download.outputs.existing_images }}
+\end{lstlisting}
 
-\paragraph{Runnery}\mbox{}\\
+\paragraph{Runnery}\mbox{}
 \begin{sloppypar}
-Większość jobów uruchamia się na środowisku zarządzanym przez GitHub (\texttt{runs-on: ubuntu-latest}), co nie wymaga utrzymania własnej infrastruktury i nie generuje kosztów podczas oczekiwania. Wyjątkiem są joba \texttt{train} i \texttt{deploy} --- wykonują się na \texttt{runs-on: self-hosted}, czyli bezpośrednio na instancji EC2. Taki podział eliminuje transfer danych treningowych przez sieć publiczną: dane pozostają na EC2 przez cały czas treningu.
+Większość jobów uruchamia się na środowisku zarządzanym przez GitHub  (\texttt{runs-on: ubuntu-latest}), co nie wymaga utrzymania własnej infrastruktury i nie generuje kosztów podczas oczekiwania. Wyjątkiem jest wyłącznie job \texttt{deploy} --- wykonuje się na \texttt{runs-on: self-hosted}, czyli bezpośrednio na instancji EC2, ponieważ wymaga dostępu do lokalnego klastra k3s i demona Docker.
 \end{sloppypar}
 
-\paragraph{Komunikacja między jobami}\mbox{}\\
+\paragraph{Komunikacja między jobami}\mbox{}
 GitHub Actions umożliwia przekazywanie wartości między jobami przez mechanizm \textit{outputs}. Job \texttt{merge-and-validate} eksponuje wyniki walidacji (\texttt{validation\_passed}, liczba obrazów), a job \texttt{train} eksponuje flagę \texttt{improved}, na podstawie której warunkowane są dalsze joby. Artefakty GitHub Actions służą natomiast do przekazywania samych plików danych (scalony zbiór) między jobem \texttt{merge-and-validate} a jobem \texttt{train}, który wykonuje się na innym runnerze.
 
-\paragraph{Współbieżność}\mbox{}\\
+\paragraph{Współbieżność}\mbox{}
 Klucz \texttt{concurrency.cancel-in-progress: false} sprawia, że jeśli użytkownik wypchnął dane kilkakrotnie zanim poprzednie uruchomienie zdążyło się zakończyć, kolejne uruchomienia nie są anulowane tylko trafiają do kolejki i wykonują się po zakończeniu poprzednich. Podejście to chroni przed sytuacją, w której późniejszy push nadpisze wyniki wcześniejszego treningu, zanim zostanie on oceniony przez bramkę jakości.
 
 \begin{figure}[H]
@@ -72,7 +82,7 @@ Po wypchnięciu gałęzi danych uruchamia się pierwszy job workflow \texttt{tra
 \end{sloppypar}
 
 \paragraph{Faza scalania}\mbox{}\\
-Job pobiera istniejące dane z Amazon S3 (za pomocą poświadczeń przechowywanych w sekretach GitHub), scala je z nowo dostarczonymi plikami i aktualizuje manifesty DVC. Scalanie jest idempotentne --- pliki o identycznej nazwie i sumie kontrolnej nie są duplikowane.
+Job pobiera istniejące dane z Amazon S3 (za pomocą poświadczeń przechowywanych w sekretach GitHub), scala je z nowo dostarczonymi plikami i aktualizuje manifesty DVC. Pliki o identycznej nazwie i sumie kontrolnej nie są duplikowane.
 
 \paragraph{Faza walidacji}\mbox{}\\
 Skrypt \texttt{data-qa.py} weryfikuje scalony zbiór danych pod kątem czterech kryteriów:
@@ -83,11 +93,11 @@ Skrypt \texttt{data-qa.py} weryfikuje scalony zbiór danych pod kątem czterech 
   \item \textbf{format pliku} --- akceptowane są formaty \texttt{.jpg} oraz \texttt{.png}.
 \end{itemize}
 
-Wynik walidacji jest publikowany jako komentarz w pull requeście. W przypadku błędów komentarz zawiera listę plików niezgodnych z wymaganiami, a dalsze jobe są pomijane (warunkowanie przez \texttt{needs} i \texttt{if: needs.merge-and-validate.outputs.valid == 'true'}).
+Wynik walidacji jest publikowany jako komentarz w pull requeście. W przypadku błędów komentarz zawiera listę plików niezgodnych z wymaganiami, a dalsze jobe są pomijane (warunkowanie przez \texttt{needs} i \texttt{if: needs.merge-and-validate.outputs.validation == 'true'}).
 
-\begin{verbatim}
+\begin{lstlisting}[language=bash]
 python devops/scripts/data-qa.py WMS/data/training/ --output report.json
-\end{verbatim}
+\end{lstlisting}
 
 \begin{figure}[H]
     \centering
@@ -114,13 +124,17 @@ Omówiony we wcześniejszym fragmencie. Pobiera istniejące dane z S3, scala je 
 Wykonuje się na hoście GitHub (nie na EC2) i jest odpowiedzialny wyłącznie za uruchomienie infrastruktury. Wywołuje AWS CLI (\texttt{aws ec2 start-instances}) z identyfikatorem instancji zapisanym w sekretach repozytorium. Po wysłaniu polecenia co 30 sekund sprawdza API GitHub, czy self-hosted runner przypisany do tej instancji pojawił się w stanie \textit{online} i czeka maksymalnie 10 minut. Dzięki temu każdy kolejny job pewnie trafi na już działającą instancję.
 
 \paragraph{Job 3: train}\mbox{}\\
-Jedyny job wykonywany na self-hosted runnerze, czyli bezpośrednio na instancji EC2. Pobiera scalony zbiór danych z artefaktu GitHub Actions, uruchamia skrypt \texttt{train.py}, który inicjalizuje model U-Net z seedem równym numerowi uruchomienia (\texttt{run\_number}), trenuje przez zdefiniowaną liczbę epok i loguje metryki \texttt{val\_dice} oraz \texttt{val\_iou} do MLflow. Po zakończeniu treningu skrypt \texttt{quality-gate.py} pobiera metryki aktualnego modelu Production z rejestru MLflow, porównuje je z wynikami nowego treningu i ustawia output \texttt{improved=true} lub \texttt{improved=false}, sterując dalszym przebiegiem workflow.
+Job uruchamiany na hoście GitHub (\texttt{runs-on: ubuntu-latest}) łączy się z MLflow przez HTTP pod Elastic IP instancji EC2. Pobiera scalony zbiór danych z artefaktu GitHub Actions, uruchamia skrypt \texttt{train.py}, który inicjalizuje model U-Net z seedem równym numerowi uruchomienia (\texttt{run\_number}), trenuje przez zdefiniowaną liczbę epok i loguje metryki \texttt{val\_dice} oraz \texttt{val\_iou} do MLflow. Po zakończeniu treningu skrypt \texttt{quality-gate.py} pobiera metryki aktualnego modelu Production z rejestru MLflow, porównuje je z wynikami nowego treningu i ustawia output \texttt{improved=true} lub \texttt{improved=false}, sterując dalszym przebiegiem workflow.
 
 \paragraph{Job 4: stop-infra}\mbox{}\\
+\begin{sloppypar}
 Zatrzymuje instancję EC2 gdy trening zakończył się błędem lub model nie poprawił wyników (\texttt{if: always() \&\& (train.result != 'success' || improved != 'true')}). Jest to reużywalny workflow wywołujący \texttt{aws ec2 stop-instances}. Dzięki warunkowi \texttt{always()} job uruchamia się nawet gdy poprzednie jobe zakończyły się wyjątkiem, eliminując ryzyko pozostawienia uruchomionej instancji i nieoczekiwanych kosztów.
+\end{sloppypar}
 
 \paragraph{Job 5: deploy}\mbox{}\\
-Uruchamia się wyłącznie jeśli model spełnił kryteria bramki jakości (\texttt{if: improved == 'true'}). Wykonuje się na self-hosted runnerze na EC2. Buduje obraz Docker na podstawie pliku \\\texttt{docker/Dockerfile.serve}, taguje go numerem wersji i hashiem commita, uwierzytelnia się w Amazon ECR i wgrywa obraz. Następnie wywołuje \texttt{helm upgrade}, który zaktualizuje deployment na klastrze k3s do nowej wersji obrazu. Kontener przy starcie pobiera model ze stadium Production z rejestru MLflow, co oddziela wersję obrazu od wersji modelu. Po wdrożeniu wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
+\begin{sloppypar}
+Uruchamia się wyłącznie jeśli model spełnił kryteria bramki jakości (\texttt{if: improved == 'true'}). Wykonuje się na self-hosted runnerze na EC2. Buduje obraz Docker na podstawie pliku \texttt{docker/Dockerfile.serve}, taguje go numerem wersji i hashiem commita, uwierzytelnia się w Amazon ECR i wgrywa obraz.
+\end{sloppypar} Następnie wywołuje \texttt{helm upgrade}, który zaktualizuje deployment na klastrze k3s do nowej wersji obrazu. Kontener przy starcie pobiera model ze stadium Production z rejestru MLflow, co oddziela wersję obrazu od wersji modelu. Po wdrożeniu wykonywany jest smoke test sprawdzający dostępność endpointów \texttt{/health}, \texttt{/predict} i \texttt{/metrics}.
 
 \paragraph{Job 6: stop-after-deploy}\mbox{}\\
 Zatrzymuje instancję EC2 po zakończeniu joba \texttt{deploy} (\texttt{if: always()}). Stanowi odpowiednik \texttt{stop-infra} dla ścieżki, gdy model się poprawił. Istnieje jako osobny job, ponieważ \texttt{deploy} korzysta z runnera na EC2. Instancja musi pozostać uruchomiona do końca wdrożenia i może zostać zatrzymana dopiero po jego zakończeniu.
@@ -140,16 +154,16 @@ Włącza automatyczne scalanie pull requesta przez API GitHub (\texttt{gh pr mer
 
 \subsection{Bramka jakości}
 
-Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacj korzysta z API MLflow Model Registry \cite{mlflow_model_registry} (\texttt{quality-gate.py}). Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
+Bramka jakości jest mechanizmem decydującym, czy nowy model jest wystarczająco dobry, żeby trafić do produkcji. Implementacj korzysta z API MLflow Model Registry \cite{mlflow_model_registry}. Skrypt łączy się z MLflow przez \texttt{MlflowClient} i pobiera metryki aktualnego modelu Production:
 
 \paragraph{Pobieranie baseline}
-\begin{verbatim}
+\begin{lstlisting}[language=Python]
 client = MlflowClient(tracking_uri=mlflow_uri)
 versions = client.get_latest_versions(
     "water-meter-segmentation",
     stages=["Production"]
 )
-\end{verbatim}
+\end{lstlisting}
 
 \paragraph{Logika decyzyjna}\mbox{}\\
 Model jest uznany za ulepszony, jeśli obie metryki ze zbioru testowego --- wyznaczone na najlepszym zapisanym modelu po zakończeniu treningu --- są wyższe od baseline:
@@ -159,7 +173,7 @@ Model jest uznany za ulepszony, jeśli obie metryki ze zbioru testowego --- wyzn
   \item \texttt{final\_test\_iou > baseline\_iou}
 \end{itemize}
 
-Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w MLflow i archiwizuje poprzednią wersję. Wynik jest przekazywany jako output do GitHub Actions (\texttt{echo "improved=true" >> \$GITHUB\_OUTPUT}).
+Jeśli warunek jest spełniony, skrypt promuje nowy model do etapu Production w MLflow i archiwizuje poprzednią wersję. Wynik jest przekazywany jako output do GitHub Actions przez \texttt{echo "improved=true" >> \$GITHUB\_OUTPUT}.
 
 \begin{figure}[H]
     \centering
