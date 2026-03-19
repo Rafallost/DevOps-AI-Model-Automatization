@@ -11,7 +11,7 @@ Rozdział opisuje infrastrukturę, na której działa system, sposób jej konfig
 \end{figure}
 
 \begin{sloppypar}
-Diagram przedstawia topologię wdrożeniową systemu z podziałem na trzy granice: platformę GitHub, usługi AWS oraz środowisko wykonawcze na instancji EC2. Na tej samej maszynie współdziałają dwa procesy systemd (runner GitHub Actions i serwer MLflow) oraz klaster k3s, w którym uruchomiony jest pod API modelu i stos monitoringu. Konfiguracja \texttt{hostNetwork:~true} pozwala podowi na dostęp do serwera MLflow przez \texttt{localhost:5000}, eliminując potrzebę wystawiania usługi poza klaster.
+Diagram przedstawia topologię wdrożeniową systemu z podziałem na trzy granice: platformę GitHub, usługi AWS oraz środowisko wykonawcze na instancji EC2. Na tej samej maszynie współdziałają dwa procesy systemd (runner GitHub Actions i serwer MLflow, opisane w rozdziale~\ref{sec:Architektura_systemu}) oraz klaster k3s, w którym uruchomiony jest pod API modelu i stos monitoringu. Konfiguracja \texttt{hostNetwork:~true} pozwala podowi na dostęp do serwera MLflow przez \texttt{localhost:5000}, eliminując potrzebę wystawiania usługi poza klaster.
 \end{sloppypar}
 
 \subsection{Infrastruktura Terraform}

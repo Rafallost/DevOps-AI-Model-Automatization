@@ -1,42 +1,52 @@
 \section{Analiza Wyników i Działania Systemu}
 \label{sec:Analiza_wynikow}
 
+\subsection{Cel analizy i kryteria oceny}
+
+Rozdział ma charakter porównawczy i zestawia ze sobą dwa podejścia do rozwijania modelu AI: manualne oraz zautomatyzowane CI/CD.
+
+Aby porównanie było jednoznaczne, analizę przeprowadzono w sześciu wymiarach:
+\begin{itemize}
+  \item nakład pracy człowieka i całkowity czas realizacji cyklu
+  \item jakość modelu (Dice, IoU) i skuteczność bramki jakości,
+  \item koszty infrastruktury,
+  \item zużycie zasobów,
+  \item ryzyko błędu ludzkiego
+  \item skalowalność procesu.
+\end{itemize}
+
 \subsection{Metodologia porównania}
 
-Ten rozdział odpowiada na pytanie badawcze postawione we wstępu: czy bardziej opłacalne jest oddelegowanie pracownika do ręcznego utrzymywania modelu, czy też lepsza jest automatyzacja procesu z wykorzystaniem narzędzi DevOps. W tym celu przeprowadzono ilościowe i jakościowe porównanie dwóch podejść do zarządzania cyklem życia modelu uczenia maszynowego \cite{kreuzberger2023mlops}. Utrzymanie identycznego zestawu narzędzi w obu podejściach jest kluczowe. Pozwala przypisać wszelkie różnice w nakładzie pracy i ryzyku błędu wyłącznie obecności lub brakowi automatyzacji, a nie różnicom w zastosowanych narzędziach:
-
+Porównano dwa scenariusze realizujące ten sam cel biznesowy (dodanie nowych danych i dostarczenie działającego modelu):
 \begin{enumerate}
-  \item \textbf{Podejście ręczne} --- wszystkie kroki (przygotowanie danych, trening, walidacja, wdrożenie) wykonywane przez człowieka bez automatyzacji. Inżynier ręcznie uruchamia skrypty, ocenia metryki, rejestruje model i aktualizuje wdrożenie, korzystając z tych samych narzędzi (MLflow, EC2, Helm), lecz bez orkiestracji. Czasy dla tego podejścia mają charakter szacunkowy i zakładają doświadczonego inżyniera ML pracującego w środowisku projektu.
-  \item \textbf{Zautomatyzowane CI/CD (niniejszy projekt)} --- pełna automatyzacja od \texttt{git push} do wdrożenia modelu w oparciu o GitHub Actions, DVC i MLflow. Jedyną czynnością człowieka jest dostarczenie nowych danych treningowych. Czasy zmierzono na podstawie logów GitHub Actions.
+  \item \textbf{Podejście ręczne} --- inżynier ręcznie wykonuje kolejne kroki: walidację danych, trening, ocenę metryk, decyzję o promocji modelu i wdrożenie.
+  \item \textbf{Podejście zautomatyzowane (zrealizowany pipeline)} --- operator dostarcza dane przez \texttt{git push}, a dalszy przebieg realizują skrypty i workflow.
 \end{enumerate}
 
-Dokładniejsze wskazanie granicy między podejściami ułatwia zestawienie stosowanych narzędzi. Narzędzia z pierwszej grupy są używane w obu przypadkach, lecz w podejściu ręcznym obsługiwane są przez człowieka krok po kroku. Narzędzia z drugiej grupy zastępują te ręczne kroki automatyzacją:
-
+Utrzymanie porównywalnego środowiska narzędziowego w obu podejściach było kluczowe. Pozwala przypisać różnice w nakładzie pracy i ryzyku błędu automatyzacji procesu, a nie zmianie technologii. Dokładniejsze wskazanie granicy między podejściami ułatwia poniższe zestawienie:
 \begin{itemize}
-  \item \textbf{Narzędzia wspólne dla obu podejść:} EC2 (środowisko obliczeniowe i hosting serwisu), MLflow (śledzenie eksperymentów i rejestr modeli), k3s z Helm (wdrożenie i zarządzanie kontenerem serwisu), Docker (konteneryzacja modelu jako API).
-  \item \textbf{Narzędzia wyłącznie dla podejścia zautomatyzowanego:} GitHub Actions (orkiestracja całego pipeline'u), DVC (wersjonowanie danych i synchronizacja z S3), hook \texttt{pre-push} Git (automatyczne tworzenie gałęzi danych), Terraform (zarządzanie infrastrukturą jako kod).
+  \item \textbf{Narzędzia wspólne dla obu podejść:} EC2 (środowisko obliczeniowe), MLflow (śledzenie eksperymentów, metryk i wersji modeli), k3s z Helm (wdrożenie), Docker (konteneryzacja API).
+  \item \textbf{Narzędzia wyłącznie dla podejścia zautomatyzowanego:} GitHub Actions (orkiestracja pipeline), DVC (wersjonowanie \textit{danych treningowych} i synchronizacja z S3), hook \texttt{pre-push} Git (automatyczne tworzenie gałęzi danych), Terraform (infrastruktura jako kod).
 \end{itemize}
 
-\begin{sloppypar}
-Porównanie obejmuje sześć wymiarów, omówionych kolejno w dalszych podsekcjach. Każdy z nich jest mierzony lub oceniany w inny sposób:
+Porównanie obejmuje sześć wymiarów:
 \begin{itemize}
-  \item \textbf{Czas nakładu pracy człowieka} (podsekcja~\ref{subsec:czasy}) --- mierzony jako łączna liczba godzin aktywnej pracy inżyniera wymaganych do ukończenia jednego cyklu: od dostarczenia nowych danych do działającego wdrożenia.
-  \item \textbf{Jakość modelu} (podsekcja~\ref{subsec:metryki}) --- oceniana przez metryki \texttt{final\_test\_dice} i \texttt{final\_test\_iou} wyznaczane na zbiorze testowym po zakończeniu treningu; porównywane są kolejne wersje modelu oraz wynik względem wartości referencyjnych.
-  \item \textbf{Pracochłonność} (podsekcja~\ref{subsec:czasy}) --- mierzona liczbą wymaganych interwencji człowieka (ręcznych kroków) w cyklu wdrożenia; każdy krok to potencjalne miejsce popełnienia błędu.
-  \item \textbf{Ryzyko błędu ludzkiego} (podsekcja~\ref{subsubsec:stabilnosc}) --- ocena jakościowa: które etapy są podatne na pomyłki i jakie mechanizmy zapobiegawcze oferuje każde z podejść.
-  \item \textbf{Skalowalność procesu} (podsekcja~\ref{subsubsec:skalowalnosc}) --- ocena tego, jak zmienia się nakład pracy i czas realizacji przy wzroście rozmiaru zbioru danych lub liczby iteracji.
-  \item \textbf{Zużycie zasobów} (podsekcja~\ref{subsec:zasoby}) --- pomiar zużycia pamięci operacyjnej i CPU przez serwis inferencyjny; ocena tego, czy zastosowana infrastruktura jest adekwatna do obciążenia.
+  \item \textbf{Nakład pracy człowieka i czas całkowity} (podsekcja~\ref{subsec:czasy}),
+  \item \textbf{Jakość modelu} (podsekcja~\ref{subsec:metryki}),
+  \item \textbf{Koszty infrastruktury i obsługi} (podsekcja~\ref{subsec:koszty}),
+  \item \textbf{Zużycie zasobów} (podsekcja~\ref{subsec:zasoby}),
+  \item \textbf{Ryzyko błędu ludzkiego} (podsekcje~\ref{subsubsec:stabilnosc}).
+  \item \textbf{skalowalność procesu} (podsekcje~\ref{subsubsec:skalowalnosc}).
 \end{itemize}
-\end{sloppypar}
 
-\subsection{Czasy wykonania scenariuszy}
+\textbf{Istotne ograniczenie metodologiczne:} czasy dla podejścia ręcznego mają charakter szacunkowy i zostały określone na podstawie doświadczeń zdobytych podczas realizacji projektu oraz analizy poszczególnych etapów procesu. Czasy podejścia zautomatyzowanego pochodzą z logów GitHub Actions i stanowią rzeczywisty pomiar czasu wykonania.
+
+\subsection{Czasy wykonania i nakład pracy człowieka}
 \label{subsec:czasy}
-
-Tabela \ref{tab:czasy} zestawia szacowane czasy nakładu pracy człowieka dla każdego podejścia w scenariuszu dodania nowej partii danych treningowych i wdrożenia ulepszonego modelu. Wartości dla podejścia ręcznego mają charakter szacunkowy i zakładają doświadczonego inżyniera ML znającego narzędzia projektu. Wartości dla podejścia zautomatyzowanego zostały zmierzone na podstawie logów GitHub Actions.
 
 \begin{table}[H]
 \centering
-\caption{Porównanie nakładu pracy człowieka w obu scenariuszach}
+\caption{Porównanie nakładu pracy człowieka i czasu realizacji cyklu}
 \label{tab:czasy}
 \begin{tabular}{|l|r|r|}
 \hline
@@ -45,31 +55,38 @@ Tabela \ref{tab:czasy} zestawia szacowane czasy nakładu pracy człowieka dla ka
 Przygotowanie i upload danych & $\sim$30 min & $\sim$10 min \\
 Walidacja danych & $\sim$30 min & automatyczna \\
 Trening modelu & $\sim$3 h & automatyczny \\
-Ocena jakości & $\sim$15 min & automatyczna \\
+Ocena jakości i decyzja wdrożeniowa & $\sim$15 min & automatyczna \\
 Wdrożenie & $\sim$45 min & automatyczne \\
 \hline
 \textbf{Nakład człowieka łącznie} & $\sim$5 h & $\sim$20 min \\
-\textbf{Całkowity czas pipeline'u} & $\sim$5 h & $\sim$4 h \\
+\textbf{Całkowity czas cyklu} & $\sim$5 h & $\sim$4 h \\
 \hline
 \end{tabular}
 \end{table}
 
-Kluczową obserwacją jest rozróżnienie między \textit{nakładem pracy człowieka} a \textit{całkowitym czasem realizacji}. W podejściu ręcznym są one tożsame, ponieważ człowiek jest zaangażowany przez cały czas trwania procesu. W podejściu zautomatyzowanym inżynier wykonuje jedynie komendę \texttt{git push} (poniżej jednej minuty), po czym pipeline działa bez jego udziału. Całkowity czas działania pipeline'u, od push do wdrożenia, można odczytać z zakładki \textit{Actions} w repozytorium GitHub.
+Wynik oznacza redukcję aktywnego czasu inżyniera o około \textbf{93\%} (z 300 min do 20 min) na jeden cykl. Jednocześnie całkowity czas cyklu został skrócony o około \textbf{20\%}, ponieważ głównym składnikiem pozostaje sam trening modelu. Zakładając pewną niedokładność oszacowań, wyniki nadal pozostają jednoznaczne: automatyzacja znacząco redukuje nakład pracy człowieka i skraca czas realizacji procesu.
 
-Wartości w tabeli nie oddają jednak pewnych trudności charakterystycznych wyłącznie dla podejścia ręcznego. Środowisko AWS Academy ogranicza sesję do 4 godzin, po czym instancja EC2 zostaje zatrzymana, a klucze dostępu wygasają. W praktyce oznacza to, że przy treningu trwającym ~3 h inżynier musi ściśle pilnować czasu, mieć gotowy skrypt szybkiego ponownego uruchomienia środowiska i liczyć się z ryzykiem utraty postępu w przypadku przekroczenia limitu. Powtarzalne ręczne wykonywanie tych samych sekwencji poleceń prowadzi ponadto do stopniowego dryfu konfiguracji: subtelne różnice między kolejnymi uruchomieniami (inna wersja biblioteki, inny podział danych, zapomniana flaga) są trudne do wykrycia i mogą zafałszować interpretację wyników. Brak automatycznego śledzenia powiązań między wersją danych a wersją modelu wymaga prowadzenia zewnętrznej dokumentacji (arkusze, notatki), która łatwo staje się nieaktualna. Podejście zautomatyzowane eliminuje te problemy przez definicję całego procesu w plikach YAML przechowywanych w repozytorium, co gwarantuje identyczne środowisko przy każdym uruchomieniu.
+Kluczowe jest rozróżnienie między \textbf{nakładem pracy człowieka} a \textbf{całkowitym czasem realizacji}. W podejściu ręcznym obie wartości są praktycznie tożsame, ponieważ operator uczestniczy we wszystkich etapach. W podejściu zautomatyzowanym człowiek dostarcza dane, a następnie pipeline działa bez jego udziału co jest ogromną zaletą dla podejścia zautomatyzowanego.
 
-Tabela~\ref{tab:czasy} uwzględnia czas, lecz nie odzwierciedla w pełni \textit{pracochłonności} mierzonej liczbą wymaganych interwencji. W podejściu ręcznym typowy cykl wdrożenia obejmuje co najmniej kilkanaście ręcznych czynności: uruchomienie środowiska, wywołanie skryptów treningowych, śledzenie postępu w logach, ręczna ocena metryk, rejestracja modelu w rejestrze, aktualizacja konfiguracji wdrożenia, restart usługi i weryfikacja poprawności działania po wdrożeniu. Każda z tych czynności jest potencjalnym miejscem popełnienia błędu i wymaga skupienia inżyniera. W podejściu zautomatyzowanym jedyną ręczną czynnością jest \texttt{git push} --- wszystkie pozostałe kroki wykonuje pipeline automatycznie, a wynik każdego etapu jest rejestrowany w logach GitHub Actions.
+W praktyce ta różnica może się dodatkowo powiększyć przez fakt, że cykl manualny obejmuje kilkanaście interwencji: uruchomienie środowiska, trening, monitorowanie logów, ocenę metryk, rejestrację modelu, aktualizację konfiguracji wdrożenia i weryfikację działania po deploymencie. Każdy etap jest potencjalnym źródłem błędu. W pipeline CI/CD większość tych kroków jest wykonywana automatycznie i audytowalnie.
 
-\subsection{Metryki modelu}
+\subsection{Jakość modeli i skuteczność bramki jakości}
 \label{subsec:metryki}
 
-Tabela \ref{tab:metryki} przedstawia metryki modelu dla kolejnych wersji wytrenowanych w ramach projektu. Baseline pochodzi z repozytorium referencyjnego \textit{Water-Meters-Segmentation} \cite{kaggle_water_meters}. Metryki są rejestrowane automatycznie przez MLflow \cite{zaharia2018mlflow} podczas każdego treningu.
+Poniższe wykresy i tabela nr~\ref{tab:metryki} przedstawiają metryki zarejestrowane w MLflow dla kolejnych wersji modelu.
+
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/mlfow_models_metrics_all.png}
+ \caption{Metryki jakości modelu w interfejsie MLflow}
+ \label{fig:mlflow-metrics-all}
+\end{figure}
 
 \begin{table}[H]
 \centering
 \caption{Metryki jakości modelu dla kolejnych wersji}
 \label{tab:metryki}
-\begin{tabular}{|l|c|c|l|}
+\begin{tabular}{|l|c|c|c|}
 \hline
 \textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Hausdorff} \\
 \hline
@@ -82,32 +99,23 @@ v13  & 0{,}0741 & 0{,}0388 & 148{,}5599 \\
 v12  & 0{,}0042 & 0{,}0021 & 358{,}6141 \\
 v11  & 0{,}0449 & 0{,}0233 & 355{,}3105 \\
 v10  & 0{,}0449 & 0{,}0233 & 355{,}3105 \\
-v9  & 0{,}3116 & 0{,}2461 & 329{,}8586 \\
-v8  & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
-v7  & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
-v5  & 0{,}3125 & 0{,}1852 & 272{,}5949 \\
-v3  & $3{,}5689\cdot 10^{-10}$ & $3{,}5689\cdot 10^{-10}$ & 724{,}0773 \\
-v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
+v9   & 0{,}3116 & 0{,}2461 & 329{,}8586 \\
+v8   & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
+v7   & 0{,}0536 & 0{,}0278 & 336{,}6613 \\
+v5   & 0{,}3125 & 0{,}1852 & 272{,}5949 \\
+v3   & $3{,}5689\cdot 10^{-10}$ & $3{,}5689\cdot 10^{-10}$ & 724{,}0773 \\
+v1   & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
 \hline
 \end{tabular}
 \end{table}
 
-Rysunek~\ref{fig:mlflow-metrics-all} wizualizuje te same wartości w interfejsie MLflow, potwierdzając ich poprawne zarejestrowanie po każdym przebiegu treningowym.
-
-\begin{figure}[H]
- \centering
- \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/mlfow_models_metrics_all.png}
- \caption{Metryki jakości modelu w interfejsie MLflow}
- \label{fig:mlflow-metrics-all}
-\end{figure}
-
-Spośród wszystkich wersji jedynie te, które jednocześnie spełniły oba kryteria bramki jakości (wyższy Dice i IoU od aktualnego modelu Production), zostały awansowane do stadium Production. Tabela~\ref{tab:metryki-production} zestawia wyłącznie te wersje.
+Dane przedstawione w powyższej tabeli wskazują, że wszystkie modele były poprawnie rejestrowane niezależnie od osiągniętych metryk jakościowych.
 
 \begin{table}[H]
 \centering
-\caption{Metryki jakości modelu dla wersji awansowanych do etapu Production}
+\caption{Wersje modelu awansowane do etapu Production}
 \label{tab:metryki-production}
-\begin{tabular}{|l|c|c|l|}
+\begin{tabular}{|l|c|c|c|}
 \hline
 \textbf{Wersja modelu} & \textbf{Dice} & \textbf{IoU} & \textbf{Hausdorff} \\
 \hline
@@ -118,134 +126,253 @@ v14  & 0{,}4710 & 0{,}4060 & 181{,}2840 \\
 v9   & 0{,}3116 & 0{,}2461 & 329{,}8586 \\
 v5   & 0{,}3125 & 0{,}1852 & 272{,}5949 \\
 v3   & $3{,}5689\cdot 10^{-10}$ & $3{,}5689\cdot 10^{-10}$ & 724{,}0773 \\
-v1  & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
+v1   & $3{,}5386\cdot 10^{-10}$ & $3{,}5386\cdot 10^{-10}$ & 409{,}2163 \\
 \hline
 \end{tabular}
 \end{table}
-
-Rysunek~\ref{fig:mlflow-metrics-production} przedstawia widok rejestru MLflow z wyłącznie tymi wersjami, skąd API pobierało model przy każdym starcie kontenera.
 
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/mlflow_models_metrics_production.png}
- \caption{Metryki jakości modelu w interfejsie MLflow który miały stage Production}
+ \caption{Rejestr modeli MLflow --- widok wersji ze stadium Production}
  \label{fig:mlflow-metrics-production}
 \end{figure}
+\mbox{}\\
+Analiza całego zbioru wersji potwierdza poprawność mechanizmu kontroli jakości. Wszystkie przebiegi zostały zarejestrowane, natomiast do etapu \textit{Production} awansowały wyłącznie wersje spełniające kryteria bramki. Pozostałe wersje nie uczestniczyły we wdrożeniu produkcyjnym.
 
-Bramka jakości w pipeline automatycznie porównuje nowy model z aktualną wersją produkcyjną i tworzy pull request tylko w przypadku jednoczesnej poprawy obu metryk.
+Warto podkreślić, że bardzo wczesne wersje modelu (v1 i v3) uzyskały wartości Dice/IoU rzędu \(10^{-10}\), co praktycznie oznacza brak użytecznej zdolności predykcyjnej. Tak skrajne wartości bywają słabo widoczne na wykresach, ponieważ warstwa wizualizacji skaluje osie pod wartości dominujące. Nie jest to błąd eksperymentu ani logowania metryk; wartości są poprawnie zarejestrowane w widoku tabelarycznym MLflow.
 
-Warto zauważyć, że wczesne wersje modelu (v1, v3) uzyskały wartości Dice i IoU rzędu $10^{-10}$, co w praktyce oznacza brak jakiejkolwiek zdolności predykcyjnej. Tak skrajnie niskie wartości nie są widoczne na wykresach interfejsu MLflow, który ustala skale do wartości znaczących (z obsługa zera jako wyjątku). Jest to ograniczenie warstwy wizualizacyjnej frameworka, nie błąd eksperymentu ani rejestracji metryk. Same wartości zostały poprawnie zalogowane i są dostępne w widoku tabelarycznym.
+Najlepszy model (v20) osiągnął Dice 0{,}8134 i IoU 0{,}7409. Wynik jest niższy od modelu referencyjnego (Dice 0{,}9275, IoU 0{,}8865), co wynika ze świadomie przyjętego ograniczenia czasu treningu i budżetu. Celem projektu była walidacja procesu automatycznego utrzymania i kontrolowanej promocji modeli, a nie maksymalizacja metryk absolutnych.
 
-Analiza zbioru wersji potwierdza prawidłowe działanie mechanizmów wersjonowania i kontroli jakości. Wszystkie wersje modelu były rejestrowane w MLflow niezależnie od wyniku, co umożliwia pełną historię eksperymentów. Do etapu \textit{Production} awansowały wyłącznie wersje spełniające wymagania bramki jakości, a tylko te wersje były następnie pobierane przez serwis inferencyjny i udostępniane użytkownikom. Pozostałe wersje zachowały stage \textit{None} i nie uczestniczyły w deploymencie.
-
-Najlepszy wytrenowany model (v20) osiągnął Dice 0{,}8134 i IoU 0{,}7409, co jest wynikiem niższym od wartości referencyjnych repozytorium bazowego (Dice 0{,}9275, IoU 0{,}8865). Różnica ta wynika ze świadomych decyzji projektowych: liczba epok treningowych była ograniczona wymogiem zmieszczenia całego pipeline'u w 4-godzinnym oknie sesji AWS Academy. Celem projektu było zademonstrowanie działania mechanizmu ciągłego ulepszania modelu przez kolejne iteracje, a nie maksymalizacja bezwzględnych wyników ani bezwzględne dorównanie do wartości referencyjnych. Każda kolejna iteracja przynosiła poprawę w stosunku do poprzedniej wersji Production, co potwierdza skuteczność zaprojektowanego mechanizmu bramki jakości.
-
-Rysunki~\ref{fig:mlflow-accuracy}--\ref{fig:mlflow-loss} ilustrują przebieg treningu najlepszego modelu (v20): krzywe Accuracy, Dice, IoU oraz funkcji straty rejestrowane w MLflow co pięć epok. Zbieżność krzywych treningowej i walidacyjnej we wszystkich czterech przypadkach wskazuje na brak przeuczenia modelu w toku całego procesu uczenia.
+W porównaniu z podejściem manualnym przyjęto konserwatywne założenie, że wszystkie wyniki uzyskane w pipeline CI/CD są osiągalne również ręcznie. Jednocześnie podejście ręczne daje większą swobodę uruchamiania dłuższych treningów i trenowania na większych zbiorach bez narzutu pełnej orkiestracji procesu. Oznacza to, że w wymiarze czysto modelowym (bez uwzględnienia ryzyka operacyjnego i kosztu pracy człowieka) podejście manualne może prowadzić do szybszego dojścia do wysokich metryk, w tym do poziomu zbliżonego do repozytorium referencyjnego przy wykorzystaniu pełnego zbioru danych.
 
 \begin{figure}[H]
  \centering
- \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_accuracy.png}
- \caption{Wykres metryki Accuracy dla najlepszej wersji modelu (v20) w interfejsie MLflow}
+ \includegraphics[width=0.85\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_accuracy.png}
+ \caption{Wykres metryki Accuracy dla najlepszej wersji modelu (v20)}
  \label{fig:mlflow-accuracy}
 \end{figure}
 
-Metryka Accuracy w zadaniach segmentacji nie jest standardowo metryką rozstrzygającą (i bywa mało jednoznaczna interpretacyjnie), ponieważ z natury problemu zwykle przyjmuje bardzo wysokie wartości – w dużej mierze dzięki dominacji pikseli tła, które łatwo sklasyfikować poprawnie. Mimo to może pełnić rolę pomocniczego wskaźnika spójności działania modelu i w pewnym stopniu „upewniać” co do stabilności wyników. Z kolei Dice (rysunek~\ref{fig:mlflow-dice}) bezpośrednio mierzy stopień nakładania się maski predykowanej z referencyjną i stanowi podstawową metrykę oceny segmentacji. Jej wartość końcowa wyniosła 0{,}8134.
+Metryka Accuracy rośnie szybko i stabilizuje się na poziomie powyżej 0{,}99 dla wszystkich podzbiorów. W zadaniu segmentacji binarnej jest to jednak metryka pomocnicza, ponieważ może zawyżać ocenę jakości przy dominacji klasy tła.
+
 \begin{figure}[H]
  \centering
- \includegraphics[width=0.85\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_dice.png}
- \caption{Wykres metryki Dice dla najlepszej wersji modelu (v20) w interfejsie MLflow}
+ \includegraphics[width=0.80\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_dice.png}
+ \caption{Wykres metryki Dice dla najlepszej wersji modelu (v20)}
  \label{fig:mlflow-dice}
 \end{figure}
 
-Metryka IoU (rysunek~\ref{fig:mlflow-iou}), znana również jako Jaccard Index, jest ściśle powiązana z Dice i mierzy stosunek przekroju do sumy predykowanego i referencyjnego obszaru. Dla modelu v20 osiągnęła wartość końcową 0,7409, co oznacza, że ponad 74\% predykowanego obszaru pokrywa się z maską referencyjną.
+Współczynnik Dice, kluczowy dla segmentacji, wykazuje systematyczny wzrost w trakcie uczenia i osiąga wysokie wartości końcowe. Niewielki odstęp między przebiegami treningowym i walidacyjnym wskazuje na dobrą generalizację modelu.
 
 \begin{figure}[H]
  \centering
  \includegraphics[width=0.85\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_iou.png}
- \caption{Wykres metryki IoU dla najlepszej wersji modelu (v20) w interfejsie MLflow}
+ \caption{Wykres metryki IoU dla najlepszej wersji modelu (v20)}
  \label{fig:mlflow-iou}
 \end{figure}
 
-Przebieg funkcji straty (rysunek~\ref{fig:mlflow-loss}) potwierdza stabilną zbieżność: wartość \textit{validation loss} systematycznie malała przez cały czas treningu bez wyraźnych oznak rozbieżności między zbiorem treningowym a walidacyjnym.
+Metryka IoU zachowuje trend zgodny z Dice: wyraźnie rośnie wraz z kolejnymi epokami i stabilizuje się pod koniec treningu. Końcowe wartości potwierdzają satysfakcjonującą zgodność predykowanych masek z maskami referencyjnymi.
 
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_loss.png}
- \caption{Wykres funkcji straty dla najlepszej wersji modelu (v20) w interfejsie MLflow}
+ \caption{Wykres funkcji straty dla najlepszej wersji modelu (v20)}
  \label{fig:mlflow-loss}
 \end{figure}
 
-Jakościową ocenę predykcji ilustruje rysunek~\ref{fig:mlflow-pred-2}, który zestawia obraz wejściowy, maskę referencyjną (ground truth) i maskę wygenerowaną przez model v20. Kształt i lokalizacja predykowanego obszaru wodomierza są zbliżone do maski referencyjnej, co koresponduje z uzyskanymi wartościami metryk ilościowych.
+Funkcja straty maleje monotonicznie dla zbioru treningowego, walidacyjnego i testowego, bez oznak niestabilności. Taki przebieg potwierdza poprawną zbieżność procesu uczenia i brak wyraźnych symptomów przeuczenia.
 
 \begin{figure}[H]
  \centering
  \includegraphics[width=\linewidth]{img/07_analiza_wynikow_i_dzialanie_systemu/plot_pred_2.png}
- \caption{Przykład predykcji modelu (v20) w interfejsie MLflow --- obraz wejściowy, maska referencyjna i maska przewidywana}
+ \caption{Przykład predykcji modelu v20 (wejście, maska referencyjna, maska przewidywana)}
  \label{fig:mlflow-pred-2}
 \end{figure}
 
-\subsection{Koszty infrastruktury AWS}
+\subsection{Koszty infrastruktury}
+\label{subsec:koszty}
 
-Tabela~\ref{tab:koszty} zestawia szacowane koszty poszczególnych zasobów AWS poniesionych w toku realizacji projektu. Ceny odpowiadają oficjalnym cennikom AWS dla regionu \texttt{us-east-1} \cite{aws_pricing}. Dominującą pozycją jest instancja EC2 uruchamiana na czas treningu; pozostałe zasoby (S3, ECR) generują koszty rzędu centów miesięcznie.
+Analiza kosztowa została zweryfikowana z wykorzystaniem oficjalnego cennika AWS (Price List API) dla regionu \texttt{us-east-1}, stan na luty 2026~\cite{aws_pricing}. Tabela~\ref{tab:koszty-cennik} przedstawia stawki jednostkowe użyte do obliczeń.
 
 \begin{table}[H]
 \centering
-\caption{Szacowane koszty infrastruktury AWS}
-\label{tab:koszty}
-\begin{tabular}{|p{5cm}|r|p{7.5cm}|}
+\caption{Stawki jednostkowe AWS użyte w analizie kosztów}
+\label{tab:koszty-cennik}
+\begin{tabular}{|p{5.2cm}|p{2.1cm}|p{6.7cm}|}
 \hline
-\textbf{Zasób} & \textbf{Koszt} & \textbf{Uwagi} \\
+\textbf{Pozycja} & \textbf{Stawka} & \textbf{Źródło i uwagi} \\
 \hline
-EC2 t3.large (trening i serwowanie) & \$0{,}0832/h & Uruchamiana tylko podczas treningu (stop/start) \\
-S3 (artefakty DVC i MLflow) & $\sim$\$0{,}02/mies. & Kilka GB artefaktów \\
-ECR (obrazy Docker) & $\sim$\$0{,}05/mies. & Jeden obraz $\approx$500\,MB \\
+EC2 \texttt{t3.large} Linux On-Demand & \$0{,}0832/h & AmazonEC2 Price List API, US East (N. Virginia) \\
 \hline
-\textbf{Łącznie (projekt)} & $\sim$\$20 & Za cały okres realizacji \\
+EBS \texttt{gp3} & \$0{,}08/GB-mies. & AmazonEC2 Price List API (wolumen systemowy EC2) \\
+\hline
+S3 Standard storage & \$0{,}023/GB-mies. & AmazonS3 Price List API, pierwszy próg do 50~TB \\
+\hline
+S3 PUT/COPY/POST/LIST & \$0{,}005/1000 req. & AmazonS3 Price List API \\
+\hline
+S3 GET/pozostałe & \$0{,}004/10000 req. & AmazonS3 Price List API \\
+\hline
+ECR private storage & \$0{,}10/GB-mies. & AmazonECR Price List API \\
 \hline
 \end{tabular}
 \end{table}
 
-Efektywność kosztową zapewnia architektura stop/start instancji EC2: instancja uruchamiana jest wyłącznie na czas treningu (job \texttt{start-infra}) i zatrzymywana bezpośrednio po jego zakończeniu (job \texttt{stop-infra}, uruchamiany zawsze niezależnie od wyniku). Rzeczywisty koszt całkowity projektu dostępny jest w konsoli AWS Academy w sekcji \textit{Billing \textgreater{} Bills}.
+Do oszacowania kosztu miesięcznego przyjęto realistyczny profil użytkowania środowiska:
+\begin{itemize}
+  \item 30~GB wolumenu EBS \texttt{gp3} dla instancji,
+  \item 20~GB danych i artefaktów w S3,
+  \item 1{,}5~GB obrazów kontenerowych w ECR,
+  \item 5000 operacji S3 typu PUT/LIST i 30000 operacji GET miesięcznie,
+  \item pojedynczy cykl treningowy: 3{,}5~h pracy EC2.
+\end{itemize}
 
-\subsection{Zużycie zasobów}
+Koszt pojedynczego cyklu obliczeniowego wynosi:
+\[
+C_{cykl} = 3{,}5 \cdot 0{,}0832 = 0{,}2912\ \text{USD}.
+\]
+
+Koszt stały miesięczny (niezależny od liczby cykli) wynosi:
+\[
+C_{stały} = 30\cdot0{,}08 + 20\cdot0{,}023 + 1{,}5\cdot0{,}10 + \frac{5000}{1000}\cdot0{,}005 + \frac{30000}{10000}\cdot0{,}004 \approx 3{,}05\ \text{USD/mies.}
+\]
+
+Całkowity koszt miesięczny można więc zapisać jako:
+\[
+C_{mies}(N)=3{,}05 + 0{,}2912\cdot N,
+\]
+gdzie \(N\) oznacza liczbę pełnych cykli treningowych w miesiącu.
+
+\begin{table}[H]
+\centering
+\caption{Koszt miesięczny dla różnych intensywności użycia pipeline CI/CD}
+\label{tab:koszty-scenariusze}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Liczba cykli/mies.} & \textbf{Koszt zmienny EC2} & \textbf{Koszt całkowity} \\
+\hline
+10 & \$2{,}91 & \$5{,}96 \\
+\hline
+30 & \$8{,}74 & \$11{,}79 \\
+\hline
+60 & \$17{,}47 & \$20{,}52 \\
+\hline
+\end{tabular}
+\end{table}
+
+\textbf{Koszt wdrożenia automatyzacji i porównanie z obsługą manualną (PLN).}
+Do analizy doliczono jednorazowy koszt przygotowania infrastruktury automatycznej:
+\[
+C_0 = 10000\ \text{PLN}.
+\]
+
+W podejściu manualnym przyjęto, że utrzymanie procesu zajmuje \textbf{20\% czasu pracy inżyniera} (0,2 etatu). Dla miesięcznej pensji brutto \(P\) koszt pracy manualnej wynosi:
+\[
+C_{\text{manual,praca}} = 0{,}2\cdot P.
+\]
+
+Z pomiarów czasu (5 h manualnie vs 20 min w CI/CD) wynika, że obciążenie człowieka po automatyzacji to około \(6{,}67\%\) obciążenia manualnego. Stąd:
+\[
+C_{\text{CI/CD,praca}} \approx 0{,}0133\cdot P.
+\]
+
+Miesięczna różnica kosztu pracy:
+\[
+\Delta C_{\text{praca}} = (0{,}2 - 0{,}0133)\cdot P = 0{,}1867\cdot P.
+\]
+
+Czas zwrotu jednorazowego kosztu wdrożenia:
+\[
+T_{\text{BE}} = \frac{C_0}{\Delta C_{\text{praca}}}
+= \frac{10000}{0{,}1867\cdot P}\ \text{[mies.]}.
+\]
+
+\begin{table}[H]
+\centering
+\caption{Próg opłacalności automatyzacji dla różnych pensji miesięcznych}
+\label{tab:break-even-pln}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Pensja \(P\) [PLN/mies.]} & \textbf{Manual \(0{,}2P\)} & \textbf{CI/CD \(0{,}0133P\)} & \textbf{Zwrot \(T_{\text{BE}}\)} \\
+\hline
+8000  & 1600 PLN/mies. & 106 PLN/mies. & 6{,}69 mies. \\
+\hline
+12000 & 2400 PLN/mies. & 160 PLN/mies. & 4{,}46 mies. \\
+\hline
+16000 & 3200 PLN/mies. & 213 PLN/mies. & 3{,}35 mies. \\
+\hline
+\end{tabular}
+\end{table}
+
+Wniosek z tej części analizy: nawet po doliczeniu jednorazowego kosztu 10000 PLN automatyzacja zwraca się względnie szybko względem stałego obciążenia pracy manualnej.
+
+Wyniki pokazują, że automatyzacja CI/CD faktycznie przyspiesza pracę i redukuje nakład operacyjny człowieka, ale odbywa się to kosztem stałych i narastających kosztów chmurowych. W praktyce oznacza to, że podejście CI/CD jest \textbf{szybkie i efektywne operacyjnie}, lecz \textbf{kosztowne finansowo} przy większej liczbie iteracji oraz przy przejściu do architektury produkcyjnej o wyższych wymaganiach dostępności i bezpieczeństwa.
+
+\subsection{Zużycie zasobów i działanie usługi}
 \label{subsec:zasoby}
 
-Serwis inferencyjny uruchomiony na klastrze k3s obciąża instancję EC2 w sposób umiarkowany. Model U-Net ładowany jest do pamięci raz przy starcie kontenera i pozostaje tam przez cały czas działania serwisu. Rozmiar modelu na dysku wynosi kilkadziesiąt MB, a zużycie pamięci operacyjnej przez kontener serwujący nie przekracza 1~GB. Predykcja jednego obrazu ($512 \times 512$ px) wykonywana jest przez CPU bez akceleracji GPU, co jest możliwe dzięki umiarkowanej wielkości modelu i niewymagającym wymaganiom czasowym (odpowiedź rzędu kilku sekund jest akceptowalna w kontekście odczytu wodomierzy). Instancja \texttt{t3.large} (2~vCPU, 8~GB RAM) zapewnia wystarczający margines zasobów dla jednoczesnego działania serwisu API i stosu monitorującego.
+Serwis inferencyjny działa stabilnie na instancji \texttt{t3.large}. Model ładowany jest jednorazowo przy starcie kontenera, a monitorowane metryki API (liczba predykcji, opóźnienia, błędy) potwierdzają poprawne działanie wdrożenia. Dla przyjętej skali obciążenia zasoby CPU i RAM były wystarczające.
 
-Metryki działającego serwisu --- liczba predykcji, czasy odpowiedzi, zużycie pamięci i obciążenie CPU --- są rejestrowane w czasie rzeczywistym przez Prometheus i wizualizowane na dashboardzie Grafana dostępnym przez NodePort instancji EC2. W podejściu ręcznym nie istnieje odpowiednik tego mechanizmu: sprawdzenie aktualnego obciążenia serwisu wymaga ręcznego logowania na instancję i uruchamiania narzędzi diagnostycznych, co uniemożliwia ciągłe śledzenie trendów w czasie.
+W kontekście obciążenia należy podkreślić, że projekt był testowany w skali laboratoryjnej, a nie pod pełnym ruchem produkcyjnym. Oznacza to, że sekcja zasobowa potwierdza wystarczalność środowiska dla przyjętego scenariusza, ale nie stanowi pełnego wyznacznika wydajnościowego dla skali wielokrotnie większej.
 
-Izolacja wersji modeli w ramach projektu realizowana jest przez etapy cyklu życia MLflow (\textit{Production}, \textit{Archived}) zamiast przez Kubernetes namespaces przewidziane w pierwotnej specyfikacji. Podejście z MLflow stages jest adekwatne dla architektury jednowęzłowej: zapewnia kontrolowaną promocję modeli, zachowuje historię wersji i nie wymaga dodatkowych zasobów klastra, które byłyby konieczne przy osobnym namespace dla każdej wersji.
+\subsection{Ocena jakościowa procesu}
 
-\subsection{Ocena jakościowa}
- 
 \subsubsection{Łatwość wdrożenia}
 
-Konfiguracja systemu wymagała jednorazowego nakładu pracy obejmującego: przygotowanie infrastruktury Terraform (VPC, EC2, S3, ECR), konfigurację k3s i Helm, integrację MLflow z S3, napisanie skryptów walidacji danych i bramki jakości oraz przygotowanie workflow GitHub Actions. Jednorazowy koszt konfiguracji wyniósł kilka tygodni pracy. Po jego poniesieniu każde kolejne wdrożenie nowej wersji modelu wymaga jedynie wykonania \texttt{git push}.
+Konfiguracja systemu wymagała jednorazowego, istotnego nakładu pracy: przygotowania Terraform, konfiguracji k3s i Helm, integracji MLflow z S3, implementacji walidacji danych i bramki jakości oraz przygotowania workflow GitHub Actions. Po wykonaniu tej inwestycji wejściowej kolejne iteracje procesu są realizowane z minimalną interwencją operatora.
 
-Podejście ręczne nie wymaga nakładu konfiguracyjnego, ale generuje cykliczny nakład pracy przy każdym wdrożeniu. Przy założeniu jednego wdrożenia miesięcznie i nakładzie $\sim$5 h na cykl, automatyzacja staje się opłacalna po kilkunastu cyklach, nie uwzględniając ryzyka błędu ludzkiego, które rośnie z liczbą powtórzeń.
+Podejście ręczne nie ma kosztu wejścia na poziomie automatyzacji, ale generuje koszt powtarzalny przy każdym cyklu. Wraz ze wzrostem liczby iteracji rośnie obciążenie inżyniera oraz ryzyko błędu ludzkiego.
 
-\subsubsection{Stabilność systemu}
+\subsubsection{Stabilność i podatność na błąd}
 \label{subsubsec:stabilnosc}
 
-W trakcie testów zaobserwowano następujące zachowania systemu w sytuacjach wyjątkowych, zestawione z odpowiednikiem w podejściu ręcznym:
-\begin{sloppypar}
+W podejściu zautomatyzowanym trzy elementy istotnie ograniczają ryzyko błędu ludzkiego:
 \begin{itemize}
-  \item \textbf{Niepoprawne dane} --- walidator odrzucał pliki niespełniające wymagań, zwracając komunikat wskazujący konkretne pliki i typy błędów, a dalsze etapy pipeline'u były blokowane. W podejściu ręcznym wykrycie takiego problemu zależy od dyscypliny inżyniera i może nastąpić dopiero po godzinach treningu na wadliwych danych.
-  \item \textbf{Model gorszy od baseline} --- bramka jakości automatycznie odrzucała model bez tworzenia PR ani wdrożenia. W podejściu ręcznym decyzja należy do człowieka i może być błędna wskutek przeoczenia, zmęczenia lub presji terminu.
-  \item \textbf{Nieoczekiwany błąd pipeline'u} --- job \texttt{stop-infra} uruchamiał się zawsze (\texttt{if: always()}), zatrzymując instancję EC2 nawet przy wyjątku w poprzednim kroku, co eliminuje ryzyko niekontrolowanych kosztów. W podejściu ręcznym pozostawienie uruchomionej instancji po zakończeniu pracy jest częstym źródłem nieplanowanych wydatków.
+  \item automatyczna walidacja danych wejściowych przed treningiem,
+  \item automatyczna bramka jakości blokująca regresję modelu,
+  \item automatyczne zatrzymanie EC2 po zakończeniu pipeline'u (także po błędzie).
 \end{itemize}
-\end{sloppypar}
+
+W podejściu ręcznym wszystkie trzy decyzje pozostają po stronie operatora, co zwiększa prawdopodobieństwo przeoczeń i kosztownych pomyłek.
+
+\begin{table}[H]
+\centering
+\caption{Porównanie ryzyka operacyjnego: manual vs CI/CD}
+\label{tab:ryzyko-porownanie}
+\begin{tabular}{|p{4.3cm}|p{5.1cm}|p{5.1cm}|}
+\hline
+\textbf{Obszar ryzyka} & \textbf{Podejście ręczne} & \textbf{CI/CD} \\
+\hline
+Walidacja danych & zależna od dyscypliny operatora, ryzyko pominięcia błędnych próbek & automatyczna bramka QA blokująca dalszy pipeline \\
+\hline
+Decyzja o promocji modelu & ręczna interpretacja metryk, podatność na presję czasu & obiektywne kryterium bramki jakości (Dice/IoU) \\
+\hline
+Koszt chmury po awarii procesu & ryzyko pozostawienia uruchomionej instancji & automatyczne \texttt{stop-infra} po błędzie (\texttt{always()}) \\
+\hline
+Odtwarzalność eksperymentu & wymaga ręcznej dokumentacji i dyscypliny & logi workflow + MLflow + DVC zapewniają ślad audytowy \\
+\hline
+\end{tabular}
+\end{table}
 
 \subsubsection{Skalowalność}
 \label{subsubsec:skalowalnosc}
 
-Zautomatyzowane podejście skaluje się znacznie lepiej niż manualne w kluczowym wymiarze: wzrost rozmiaru zbioru danych lub liczby iteracji nie generuje dodatkowego nakładu pracy człowieka. W podejściu ręcznym każde uruchomienie treningu wymaga takiego samego zaangażowania inżyniera niezależnie od skali danych. W podejściu zautomatyzowanym nakład pracy człowieka pozostaje stały na poziomie jednej komendy \texttt{git push}, a całość obciążenia obliczeniowego przejmuje infrastruktura.
+Najważniejsza przewaga automatyzacji dotyczy skalowalności pracy zespołu: wzrost liczby iteracji nie zwiększa nakładu pracy człowieka proporcjonalnie do liczby cykli. Ograniczenia obecnej implementacji (single-node k3s, jeden runner, środowisko AWS Academy) mają charakter infrastrukturalny i budżetowy, nie logiczny. Logika pipeline'u może być przeniesiona do większego środowiska bez zmiany modelu procesu.
 
-Zrealizowana architektura ma jednak następujące ograniczenia skalowalności wynikające ze świadomych decyzji kosztowych:
-\begin{itemize}
-  \item \textbf{Single-node k3s} --- brak wysokiej dostępności; awaria instancji EC2 skutkuje niedostępnością zarówno API modelu, jak i rejestru MLflow,
-  \item \textbf{Jeden runner EC2} --- brak możliwości równoległych treningów; kolejne zlecenia oczekują w kolejce,
-  \item \textbf{Rozmiar zbioru danych} --- architektury nie testowano przy zbiorach przekraczających 1000 obrazów; znacznie większe zbiory mogą wymagać instancji o większej pamięci RAM lub dysku.
-\end{itemize}
+\begin{table}[H]
+\centering
+\caption{Skalowalność nakładu pracy człowieka przy wzroście liczby cykli}
+\label{tab:skalowalnosc-pracy}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Liczba cykli / mies.} & \textbf{Manual (5 h/cykl)} & \textbf{CI/CD (20 min/cykl)} \\
+\hline
+10 & 50 h & 3 h 20 min \\
+\hline
+30 & 150 h & 10 h \\
+\hline
+60 & 300 h & 20 h \\
+\hline
+\end{tabular}
+\end{table}
 
-Ograniczenia te są charakterystyczne dla środowiska akademickiego z budżetem \$50 i nie są immanentną cechą zaprojektowanego podejścia. W środowisku produkcyjnym zastąpienie k3s klastrem wielowęzłowym i dodanie kolejnych runnerów EC2 usunęłoby pierwsze dwa ograniczenia bez zmian w logice pipeline'u.
+Zestawienie to pokazuje, że przy wzroście liczby iteracji różnica obciążenia człowieka rośnie liniowo i szybko staje się kluczowym argumentem organizacyjnym na rzecz automatyzacji.

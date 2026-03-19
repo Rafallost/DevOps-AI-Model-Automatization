@@ -80,7 +80,7 @@ Podstawowe pojęcia:
   \item \textbf{Step} --- pojedyncza operacja w ramach joba: wywołanie skryptu lub gotowej akcji,
   \item \textbf{Runner} --- maszyna wykonująca joba: może być zarządzana przez GitHub (hosted) lub przez użytkownika (self-hosted),
   \item \textbf{Artefakt} --- plik lub katalog przekazywany między jobami albo pobierany po zakończeniu workflow,
-  \item \textbf{Secrets} --- zaszyfrowane zmienne środowiskowe przechowywane na poziomie repozytorium; umożliwiają bezpieczne wstrzykiwanie poświadczeń i kluczy API do workflow bez umieszczania ich w kodzie źródłowym.
+  \item \textbf{Secrets} --- zaszyfrowane zmienne środowiskowe przechowywane na poziomie repozytorium. Umożliwiają bezpieczne używanie poświadczeń i kluczy API do workflow.
 \end{itemize}
 \end{sloppypar}
 
@@ -105,7 +105,7 @@ MLflow to platforma z publicznie dostępnym kodem źródłowym (ang. open-source
   \item \textbf{Model Registry} --- centralny rejestr wersji modeli z etapami cyklu życia (Staging, Production, Archived).
 \end{itemize}
 
-Model Registry jest kluczowym elementem w kontekście bramki jakości. Po każdym treningu nowa wersja modelu jest rejestrowana w MLflow. Bramka jakości pobiera metryki modelu aktualnie w etapie Production i porównuje z nowym wynikiem. Tylko model z lepszymi metrykami zostaje awansowany do Production \cite{mlflow_model_registry}.
+W kontekście projektu Model Registry pełni kluczową rolę w mechanizmie bramki jakości; szczegółowy opis implementacji znajduje się w podrozdziale~\ref{subsec:bramka-jakosci} \cite{mlflow_model_registry}.
 
 \subsection{Konteneryzacja --- Docker}
 
