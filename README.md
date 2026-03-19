@@ -1,5 +1,7 @@
 # DevOps-AI-Model-Automatization
 
+> 📄 The final engineering thesis is available in the PDF file: `Thesis_final_version.pdf`
+
 Using DevOps techniques to implement an automated CI/CD process for training and versioning AI models: an analysis of the maintenance of AI-based systems compared to manual methods
 
 ## Objective of the Thesis:
