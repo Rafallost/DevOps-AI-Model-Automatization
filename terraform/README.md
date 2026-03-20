@@ -1,135 +1,299 @@
-# terraform/
+# Terraform
 
-Infrastruktura AWS jako kod. Całość opiera się na jednej instancji EC2 z k3s — świadomy kompromis budżetowy zamiast EKS/RDS/NAT Gateway.
+AWS infrastructure orchestration for complete ML deployment:
+- EC2 instance (t3.large) with k3s Kubernetes cluster
+- VPC + subnet + security groups
+- S3 buckets (DVC data, MLflow artifacts)
+- ECR repository (Docker images)
+- IAM roles and optional GitHub OIDC
+- Optional monitoring (Prometheus + Grafana)
 
-## Struktura
+## Project Structure
 
 ```
 terraform/
-├── main.tf         # korzeń: wywołuje moduły, konfiguruje providera
-├── variables.tf    # zmienne wejściowe (region, instance type, nazwy bucketów)
-├── outputs.tf      # adresy, URL-e, komendy SSH po apply
+├── main.tf              # Root module configuration
+├── variables.tf         # Input variables
+├── outputs.tf          # Output values (IPs, URLs, etc.)
+├── terraform.tfstate   # State file (DO NOT commit in production!)
+├── terraform.tfvars    # Variable overrides (local config)
 └── modules/
-    ├── vpc/            # sieć: VPC, subnet, IGW, security group
-    ├── s3-mlops/       # storage: dwa buckety S3 (DVC + MLflow)
-    ├── ecr/            # rejestr Docker dla obrazów modelu
-    ├── ec2-k3s/        # instancja EC2 z k3s, MLflow, GitHub Actions runner
-    └── iam-github-oidc/  # OIDC dla GitHub Actions (wyłączony w AWS Academy)
+    ├── vpc/            # Network setup (VPC, subnet, security group)
+    ├── s3-mlops/       # S3 buckets (DVC + MLflow artifacts)
+    ├── ecr/            # ECR registry for Docker images
+    ├── ec2-k3s/        # EC2 instance with k3s + MLflow + monitoring
+    └── iam-github-oidc/ # GitHub Actions OIDC (optional)
 ```
+---
 
-## Moduły
+## Automation Summary: What Terraform Does vs Manual Setup
 
-### vpc
+| Component | Automated? | Details |
+|-----------|-----------|---------|
+| **AWS Infrastructure** | ✅ | VPC, subnet, security group, EC2, S3, ECR |
+| **OS Installation** | ✅ | Amazon Linux 2023 AMI selection |
+| **System Packages** | ✅ | Docker, Python, git, kubectl, helm via user-data.sh |
+| **k3s Kubernetes** | ✅ | Installed and configured as systemd service |
+| **MLflow Server** | ✅ | Installed, configured with S3 backend, runs on localhost:5000 |
+| **Monitoring (Prometheus/Grafana)** | ✅ | Optional, installed if `install_monitoring=true` |
+| **GitHub Runner** | ❌ | Dependencies only; token registration still manual |
+| **Docker Build & Push** | ❌ | GitHub Actions pipeline handles this |
+| **Model Deployment** | ❌ | GitHub Actions + Helm deploy to k3s |
+| **Pre-push Hooks** | ❌ | Must run `install-git-hooks.sh` on EC2 manually |
 
-Minimalna sieć publiczna (brak NAT Gateway — koszt ~$32/mies.):
+**TL;DR**: Terraform creates and configures infrastructure; GitHub Actions handles CI/CD pipelines.
 
-- VPC `10.0.0.0/16` + jeden public subnet `10.0.1.0/24`
-- Security group: SSH (22) i FastAPI (8000) tylko z IP użytkownika (auto-detect), MLflow (5000) otwarty na `0.0.0.0/0` (potrzebne dla GitHub Actions)
+---
+## Full Terraform Workflow
 
-### s3-mlops
-
-Dwa oddzielne buckety z włączonym wersjonowaniem i zablokowanym dostępem publicznym:
-
-- **DVC bucket** — dane treningowe (obrazy + maski), zarządzane przez DVC
-- **MLflow bucket** — artefakty modeli, logi, wykresy z treningu
-
-### ecr
-
-Rejestr Docker z polityką lifecycle: zatrzymuje ostatnie 5 tagów, starsze usuwa automatycznie. Image scanning wyłączony (koszt). `force_destroy = true` dla czystego `terraform destroy`.
-
-### ec2-k3s
-
-Główny węzeł obliczeniowy:
-
-- AMI: Amazon Linux 2023 (wspierany do 2028)
-- Instancja: `t3.large` (8GB RAM) — minimum dla PyTorch images (~9GB skompresowane)
-- Dysk: 100GB gp3 — zwiększony z 40GB po problemach z DiskPressure na k3s
-- IAM: `LabInstanceProfile` (predefiniowany w AWS Academy; własne role IAM zablokowane)
-- Elastic IP dla stabilnego adresu między restartami sesji
-
-User-data przy starcie instaluje: Docker, k3s, Helm, MLflow (systemd), GitHub Actions runner, opcjonalnie Prometheus + Grafana.
-
-### iam-github-oidc
-
-**Aktualnie wyłączony** w `main.tf` (AWS Academy Learner Lab blokuje tworzenie ról IAM). Moduł gotowy do włączenia w standardowym koncie AWS — definiuje OIDC provider dla `token.actions.githubusercontent.com` i rolę IAM z dostępem do S3 i ECR.
-
-## Użycie
-
+### Step 1: Initialize Terraform
 ```bash
-# Inicjalizacja (raz)
-cd terraform && terraform init
+cd infrastructure/terraform
+terraform init
+```
+- Downloads AWS provider plugin
+- Creates `.terraform/` directory
+- Initializes backend (local or remote state storage)
 
-# Podgląd zmian
-terraform plan
+### Step 2: Validate Configuration
+```bash
+terraform validate
+```
+- Checks syntax and logical errors
+- Verifies module references
+- Recommended before `plan`
 
-# Lub najlepiej wskazać ścieżkę ręcznie
-terraform plan -var-file=D:\...\Water-Meters-Segmentation-Automatization\devops\terraform\terraform.tfvars
+### Step 3: Review Changes (IMPORTANT!)
+```bash
+terraform plan -var-file=terraform.tfvars
+```
+This shows **everything** that will be created/modified/deleted:
+- EC2 instance spec
+- Security group rules
+- S3 bucket configuration
+- IAM roles
+- Network topology
+- Resource costs (estimates)
 
-# Tworzenie infrastruktury
-terraform apply   # lub użyj scripts/deploy-to-cloud.sh
-
-# Lub najlepiej wskazać ścieżkę ręcznie
-terraform apply -var-file=D:\...\Water-Meters-Segmentation-Automatization\devops\terraform\terraform.tfvars -auto-approve
-
-# Niszczenie (pamiętaj o opróżnieniu S3 najpierw)
-terraform destroy   # lub użyj scripts/cleanup-aws.sh
+**Output example:**
+```
+Plan: 15 to add, 0 to change, 0 to destroy.
 ```
 
-Wartości zmiennych trzymaj w pliku `terraform.tfvars` (w `.gitignore`):
+**Review checklist:**
+- [ ] Correct region (us-east-1)?
+- [ ] Correct instance type (t3.large)?
+- [ ] S3 bucket names unique (account ID appended)?
+- [ ] Security group allows SSH + ModelPort + MLflow?
+- [ ] IAM role uses LabInstanceProfile (AWS Academy)?
 
-```hcl
-key_name      = "labsuser"
-dvc_bucket    = "wms-dvc-data-<account-id>"
-mlflow_bucket = "wms-mlflow-artifacts-<account-id>"
+### Step 4: Apply Configuration
+```bash
+# Interactive (recommended for first deployment)
+terraform apply -var-file=terraform.tfvars
+
+# Or automated (requires approval from Step 3)
+terraform apply -var-file=terraform.tfvars -auto-approve
 ```
 
-## Outputs po apply
+After `apply`, Terraform will:
+1. Create all AWS resources
+2. Run user-data.sh on EC2 (installs k3s, docker, MLflow, etc.)
+3. Output EC2 public IP, security group IDs, S3 bucket names
+4. Save state to `terraform.tfstate`
 
-| Output               | Przykład                                                    |
-| -------------------- | ----------------------------------------------------------- |
-| `ec2_public_ip`      | `13.219.216.230`                                            |
-| `mlflow_url`         | `http://13.219.216.230:5000`                                |
-| `ecr_repository_url` | `055677744286.dkr.ecr.eu-central-1.amazonaws.com/wms-model` |
-| `ssh_command`        | `ssh -i ~/.ssh/labsuser.pem ec2-user@13.219.216.230`        |
+### Step 5: Verify Deployment
+```bash
+# Check outputs
+terraform output
 
-## Monitoring (opcjonalny)
+# Example output:
+# ec2_public_ip = "54.123.45.67"
+# k3s_ready = true
+# mlflow_url = "http://54.123.45.67:5000"
+# ecr_repository_url = "055677744286.dkr.ecr.us-east-1.amazonaws.com/wms-model"
 
-Prometheus + Grafana wyłączone domyślnie (~750MB RAM, ~2GB dysku). Włączenie:
+# SSH to EC2 and verify services
+ssh -i ~/.ssh/labsuser.pem ec2-user@<EC2_IP>
+systemctl status docker
+systemctl status k3s
+systemctl status mlflow
+```
+
+### Step 6: Destroy Infrastructure (Clean Up)
+```bash
+# Review what will be deleted
+terraform plan -destroy -var-file=terraform.tfvars
+
+# Delete all resources
+terraform destroy -var-file=terraform.tfvars
+
+# Or automated
+terraform destroy -var-file=terraform.tfvars -auto-approve
+```
+
+**Important**: This will:
+- ❌ Terminate EC2 instance
+- ❌ Delete VPC and network interfaces
+- ❌ **Empty and delete S3 buckets** (WARNING: Data loss!)
+- ❌ Delete ECR repository and images
+- ❌ Delete IAM roles
+
+---
+
+## Configuration Variables
+
+Edit `infrastructure/terraform.tfvars`:
 
 ```hcl
-# terraform.tfvars
+# AWS Region
+aws_region        = "us-east-1"
+availability_zone = "us-east-1a"
+
+# EC2 Configuration
+instance_type = "t3.large"  # 8GB RAM, 2 vCPU (AWS Academy limit)
+key_name = "vockey"         # Pre-created SSH key pair
+
+# S3 Buckets (globally unique - account ID auto-appended)
+dvc_bucket    = "wms-dvc-data-055677744286"         # DVC training data
+mlflow_bucket = "wms-mlflow-artifacts-055677744286" # MLflow artifacts
+
+# GitHub Repository
+github_repo = "Rafallost/Water-Meters-Segmentation-Automatization"
+
+# Monitoring (Prometheus + Grafana)
 install_monitoring = true
-grafana_password   = "haslo"
+grafana_password   = "WMS-Monitoring-2026!"
 ```
 
-Dashboardy dostępne przez SSH tunnel:
+---
+
+## Common Issues
+
+### "terraform plan" shows "No changes"
+- Terraform state is in sync with AWS
+- All resources already exist
+- To check actual state: `terraform refresh`
+
+### "Error: S3 bucket already exists"
+- S3 names are globally unique across AWS
+- Solution: Append different suffix to bucket name in `terraform.tfvars`
+- Example: `wms-dvc-data-123456789` (different account ID)
+
+### "Error: Insufficient capacity"
+- AWS Academy t3.large limit reached
+- Solution: Try different availability zone or different region
+- Or: Reduce instance size to t3.medium (not recommended for ML)
+
+### "terraform.tfstate" file corrupted
+- **Never edit directly**
+- Restore from backup: `cp terraform.tfstate.backup terraform.tfstate`
+- Or use: `terraform state pull > backup.json`
+
+### EC2 instance created but services not starting
+- SSH to instance and check: `tail -50 /var/log/user-data.log`
+- Wait 2-3 minutes for user-data.sh to complete
+- Check: `systemctl status docker`, `systemctl status k3s`
+
+---
+
+## AWS Academy Constraints
+
+⚠️ **Important limitations**:
+- ❌ Cannot create new IAM roles (use pre-existing `LabInstanceProfile`)
+- ❌ No AWS Load Balancer (use NodePort instead)
+- ❌ Limited t3.large instances per region
+- ✅ Can create EC2, VPC, S3, ECR, SecurityGroups
+- ✅ Can create IAM role for GitHub OIDC (if needed)
+
+---
+
+## Workflow Diagram
+
+```
+terraform init
+    ↓
+terraform validate
+    ↓
+terraform plan -var-file=terraform.tfvars
+    ↓ (Review output carefully!)
+terraform apply -var-file=terraform.tfvars
+    ↓
+EC2 runs user-data.sh (2-3 mins)
+    ↓
+k3s + Docker + MLflow + Monitoring ready
+    ↓
+GitHub Actions can deploy models
+    ↓
+(Later) terraform destroy
+```
+
+---
+
+## Modules Explained
+
+| Module | Creates | Purpose |
+|--------|---------|---------|
+| `vpc` | VPC, Subnet, SecurityGroup, Internet Gateway | Network isolation, firewall rules |
+| `s3-mlops` | 2 S3 buckets + lifecycle policies | DVC data versioning, MLflow artifact storage |
+| `ecr` | ECR repository + lifecycle rules | Private Docker registry for model images |
+| `ec2-k3s` | EC2 instance, EIP, user-data script | ML service deployment platform |
+| `iam-github-oidc` | IAM OIDC provider, GitHub Actions trust | Secure GitHub Actions ↔ AWS auth (optional) |
+
+---
+
+## Advanced: Remote State Storage
+
+By default, Terraform stores state locally in `terraform.tfstate` (insecure for teams).
+
+To use S3 backend:
+```hcl
+# terraform.tf or main.tf
+terraform {
+  backend "s3" {
+    bucket         = "wms-terraform-state"
+    key            = "prod/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "terraform-locks"
+    encrypt        = true
+  }
+}
+```
+
+Then: `terraform init` (will ask to migrate state to S3)
+
+---
+
+## Useful Commands
 
 ```bash
-ssh -L 3000:localhost:3000 ec2-user@<EC2_IP>
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
-# http://localhost:3000  (admin / <grafana_password>)
+# Validate syntax
+terraform validate
+
+# Format code
+terraform fmt -recursive
+
+# Show all resources
+terraform state list
+
+# Show specific resource details
+terraform state show aws_instance.k3s
+
+# Import existing AWS resource (rare)
+terraform import aws_instance.k3s i-1234567890abcdef0
+
+# Output only specific value
+terraform output ec2_public_ip
+
+# Show state as JSON
+terraform state pull | jq '.resources[] | select(.type=="aws_instance")'
 ```
 
-## Ograniczenia AWS Academy
+---
 
-- Sesje wygasają co ~4h — EC2 może zmienić IP (Elastic IP temu zapobiega)
-- Brak uprawnień do tworzenia ról IAM — stąd `LabInstanceProfile` i wyłączony moduł OIDC
-- `s3:PutObject` zablokowany dla lokalnych credentiali — upload danych tylko przez GitHub Actions
-- Klucz SSH: `~/.ssh/labsuser.pem`
+## Notes
 
-## Troubleshooting
-
-**User-data script failed** — sprawdź logi na EC2:
-
-```bash
-sudo cat /var/log/user-data.log
-```
-
-**MLflow lub k3s nie wystartował** — uruchom ręcznie:
-
-```bash
-./scripts/setup-k3s.sh
-./scripts/setup-mlflow.sh
-```
-
-**S3 BucketAlreadyExists** — nazwy bucketów muszą być globalnie unikalne; dodaj suffix z account ID.
+- **State file**: Keep `terraform.tfstate` and `terraform.tfstate.backup` safe (contains sensitive data)
+- **AWS Academy**: LabInstanceProfile has broad permissions; use in sandbox only
+- **GitHub OIDC**: Optional—enables keyless GitHub Actions auth to AWS (requires IAM setup)
+- **Costs**: t3.large ≈ $0.10/hour in AWS Academy (included in free tier)
