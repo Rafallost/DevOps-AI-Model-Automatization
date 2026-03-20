@@ -47,7 +47,7 @@ echo ""
 # Navigate to terraform directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-TERRAFORM_DIR="$PROJECT_ROOT/infrastructure/terraform"
+TERRAFORM_DIR="$PROJECT_ROOT/terraform"
 
 if [ ! -d "$TERRAFORM_DIR" ]; then
     echo "❌ Terraform directory not found: $TERRAFORM_DIR"

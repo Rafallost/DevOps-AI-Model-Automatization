@@ -13,9 +13,9 @@ Manual deployment instructions for EC2/k3s/MLflow based on repo scripts.
 ## 1) Provision infrastructure
 
 ```bash
-cd infrastructure/terraform
+cd terraform
 terraform init
-terraform apply -var-file= terraform.tfvars -auto-approve
+terraform apply -var-file=terraform.tfvars -auto-approve
 ```
 
 ## 2) Verify EC2 and MLflow
@@ -44,7 +44,8 @@ bash scripts/setup-k3s.sh
 helm upgrade --install wms-model helm/ml-model \
   --set image.repository=<ECR_URL>/wms-model \
   --set image.tag=latest \
-  --set env.MLFLOW_TRACKING_URI=http://localhost:5000
+  --set env[0].name=MLFLOW_TRACKING_URI \
+  --set env[0].value=http://localhost:5000
 ```
 
 ## 6) Verify deployment

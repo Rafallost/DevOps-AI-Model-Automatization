@@ -9,7 +9,7 @@ Go to GitHub: Settings -> Actions -> Runners -> New self-hosted runner.
 ## Step 2: Install on EC2
 ```bash
 mkdir -p ~/actions-runner && cd ~/actions-runner
-curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v2.319.1/actions-runner-linux-x64-2.319.1.tar.gz
+curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v2.331.0/actions-runner-linux-x64-2.331.0.tar.gz
 tar xzf actions-runner.tar.gz
 ./config.sh --url https://github.com/<org>/<repo> --token <TOKEN> --name ec2-runner --labels self-hosted,linux
 sudo ./svc.sh install

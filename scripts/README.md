@@ -9,7 +9,7 @@ Repository scripts for infrastructure, deployment, and model operations.
 - cleanup-aws.sh: remove AWS resources.
 - setup-k3s.sh: install k3s and Helm.
 - setup-mlflow.sh: install and start MLflow.
-- cerify-deployment.sh: run verification checks.
+- verify-deployment.sh: run verification checks.
 - install-git-hooks.sh: install pre-push hook.
 - cleanup-old-deployments.sh: remove old model-\* namespaces.
 - cleanup-s3-dvc.sh: cleanup orphaned DVC objects from S3.
@@ -17,6 +17,7 @@ Repository scripts for infrastructure, deployment, and model operations.
 - get-baseline-metrics.py: fetch Production baseline metrics.
 - promote-model.py: promote model to Production.
 - update-model-metadata.py: update model-metadata.json.
+- train-with-retry.py: retry training wrapper (legacy).
 
 ## How to use
 
